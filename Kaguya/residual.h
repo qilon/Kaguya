@@ -28,21 +28,21 @@ public:
 		const T* lighting_variation = parameters[2];
 		const T* vertex = parameters[3];
 
-		vector<T*> adj_vertices;
-		for (int i = 0; i < n_adj_vertices; i++)
+		vector<const T*> adj_vertices;
+		for (size_t i = 0; i < n_adj_vertices; i++)
 		{
-			T* v_neighbour = parameters[4 + i];
+			const T* v_neighbour = parameters[4 + i];
 			adj_vertices.push_back(v_neighbour);
 		}
 
 		T normal[3];
 		computeNormal(vertex, adj_vertices, n_adj_faces, false, normal);
 
-		T shading = computeShading(normal, sh_coeff, sh_order, sh_coeff);
+		T shading = computeShading(normal, sh_coeff, sh_order);
 
-		for (int i = 0; i < n_channels; ++i)
+		for (size_t i = 0; i < n_channels; ++i)
 		{
-			T est_value = albedo[i] * shading[0] + lighting_variation[i];
+			T est_value = albedo[i] * shading + lighting_variation[i];
 			residuals[i] = T(intensity[i]) - est_value;
 		}
 
@@ -103,14 +103,14 @@ public:
 	// Computes vertex normal direction given its position, its one-ring neighbours 
 	// and the corresponding face indexes. Can handle clockwise and counter-clockwise
 	template <typename T>
-	void computeNormal(const T* p, const vector<T*> &adjP,
-		const int &_n_faces, const bool clockwise, T* normal) const
+	void computeNormal(const T* p, const vector<const T*> &adjP,
+		const int n_faces, const bool clockwise, T* normal) const
 	{
 		normal[0] = T(0.0);
 		normal[1] = T(0.0);
 		normal[2] = T(0.0);
 
-		for (int i = 0; i < _n_faces; i++)
+		for (int i = 0; i < n_faces; i++)
 		{
 			unsigned int vIdx1 = i;
 			unsigned int vIdx2 = (i + 1) % adjP.size();
@@ -135,7 +135,7 @@ public:
 	// Computes shading value given normal direction, spherical harmonic coefficients 
 	// and the SH order
 	template <typename T>
-	T computeShading(const T* _normal, const Intensity* _sh_coeff,
+	T computeShading(const T* _normal, const T* _sh_coeff,
 		const unsigned int _sh_order) const
 	{
 		T n_x = _normal[0];
@@ -224,9 +224,9 @@ public:
 	bool operator()(const T* const _value1, const T* const _value2,
 		T* residuals) const
 	{
-		for (int i = 0; i < n_channels; ++i)
+		for (size_t i = 0; i < n_channels; ++i)
 		{
-			residuals[i] = T(weight[0]) * (_value1 - _value2);
+			residuals[i] = T(weight) * (_value1[i] - _value2[i]);
 		}
 
 		return true;
@@ -254,9 +254,9 @@ public:
 	bool operator()(const T* const _value,
 		T* residuals) const
 	{
-		for (int i = 0; i < n_channels; ++i)
+		for (size_t i = 0; i < n_channels; ++i)
 		{
-			residuals[i] = _value;
+			residuals[i] = _value[i];
 		}
 
 		return true;
@@ -313,14 +313,13 @@ public:
 		// 0 - Current vertex position or translation
 		// >0 - Neighbour vertices positions or translations
 
-		T* p = parameters[0];
+		const T* p = parameters[0];
 
-		vector<T*> adjP;
-		for (int i = 0; i < n_adj_vertices; i++)
+		vector<const T*> adjP;
+		adjP.reserve(n_adj_vertices);
+		for (size_t i = 0; i < n_adj_vertices; i++)
 		{
-			int v_idx = adjVerticesInd[i];
-
-			T* p_neighbour = parameters[i + 1];
+			const T* p_neighbour = parameters[i + 1];
 
 			adjP.push_back(p_neighbour);
 		}
@@ -330,7 +329,7 @@ public:
 		T laplacian_z = T(0.0);
 		T weight_norm = T(0.0);
 
-		for (int i = 1; i <= n_adj_vertices; i++)
+		for (size_t i = 1; i <= n_adj_vertices; i++)
 		{
 			T weight = T(0.0);
 			T area = T(0.0);

@@ -2,13 +2,13 @@
 
 #include "MyMesh.h"
 //=============================================================================
-int writeMesh(const MyMesh& _mesh, const char* _filename,
+int writeMesh(const MyMesh& _mesh, const string &_filename,
 	const OpenMesh::IO::Options _wopt);
 //=============================================================================
-int readMesh(MyMesh& _mesh, const char* _filename,
+int readMesh(MyMesh& _mesh, const string &_filename,
 	OpenMesh::IO::Options _ropt);
 //=============================================================================
-inline int readMesh(MyMesh& _mesh, const char* _filename,
+inline int readMesh(MyMesh& _mesh, const string &_filename,
 	OpenMesh::IO::Options _ropt)
 {
 	if (!OpenMesh::IO::read_mesh(_mesh, _filename, _ropt))
@@ -21,7 +21,7 @@ inline int readMesh(MyMesh& _mesh, const char* _filename,
 	return 0;
 }
 //=============================================================================
-inline int writeMesh(const MyMesh& _mesh, const char* _filename,
+inline int writeMesh(const MyMesh& _mesh, const string &_filename,
 	const OpenMesh::IO::Options _wopt)
 {
 	if (!OpenMesh::IO::write_mesh(_mesh, _filename, _wopt))
@@ -35,7 +35,7 @@ inline int writeMesh(const MyMesh& _mesh, const char* _filename,
 }
 //=============================================================================
 template<typename T>
-int writeVector(const std::vector<T> &_v, const char* _filename)
+int writeVector(const std::vector<T> &_v, const string &_filename)
 {
 	std::ofstream ofs;
 	ofs.open(_filename, std::ofstream::out | std::ofstream::trunc);
@@ -49,7 +49,7 @@ int writeVector(const std::vector<T> &_v, const char* _filename)
 }
 //=============================================================================
 template<typename T>
-int readVector(std::vector<T> &_v, const char* _filename)
+int readVector(std::vector<T> &_v, const string &_filename)
 {
 	std::ifstream ifs(_filename);
 
