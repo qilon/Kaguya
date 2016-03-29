@@ -698,6 +698,13 @@ void BlackBox::estimateAlbedo(const ceres::Solver::Options &_options)
 	for (size_t i = 0; i < n_vertices; ++i)
 	{
 		problem.SetParameterBlockConstant(&vertices[i][0]);
+
+		problem.SetParameterLowerBound(&albedos[i][0], 0, 0.0);
+		problem.SetParameterLowerBound(&albedos[i][0], 1, 0.0);
+		problem.SetParameterLowerBound(&albedos[i][0], 2, 0.0);
+		problem.SetParameterUpperBound(&albedos[i][0], 0, 1.0);
+		problem.SetParameterUpperBound(&albedos[i][0], 1, 1.0);
+		problem.SetParameterUpperBound(&albedos[i][0], 2, 1.0);
 	}
 
 	ceres::Solver::Summary summary;

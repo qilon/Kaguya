@@ -46,7 +46,9 @@ public:
 			residuals[i] = T(intensity[i]) - est_value;
 		}
 
-		return true;
+		bool shading_in_bounds = shading >= T(0.0) && shading <= T(1.0);
+
+		return shading_in_bounds;
 	}
 
 	template<typename T>
