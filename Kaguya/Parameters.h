@@ -3,15 +3,21 @@
 
 #define SH_ORDER						"sh_order"
 
+#define ALBEDO_PERCENTILE		"albedo_percentile"
 #define COLOR_DIFF_THRESHOLD	"color_diff_threshold"
-#define COLOR_DIFF_STD			"color_diff_std"
-#define NORMAL_DIFF_STD			"normal_diff_std"
+#define COLOR_DIFF_VAR			"color_diff_var"
+#define NORMAL_DIFF_VAR			"normal_diff_var"
+
+#define USE_DEPTH_WEIGHT		"use_depth_weight"
 
 #define SMOOTH_ALBEDO_WEIGHT			"smooth_albedo_weight"
 #define SMOOTH_LOCAL_LIGHTING_WEIGHT	"smooth_local_lighting_weight"
 #define LOCAL_LIGHTING_MAGNITUDE_WEIGHT	"local_lighting_magnitude_weight"
 #define DISPLACEMENT_WEIGHT				"displacement_weight"
-#define LAPLACIAN_SMOOOTH_WEIGHT		"laplacian_smoooth_weight"
+#define LAPLACIAN_SMOOTH_WEIGHT			"laplacian_smooth_weight"
+#define TV_WEIGHT						"tv_weight"
+
+#define DATA_HUBER_WIDTH	"data_huber_width"
 
 // I/O parameters
 #define INPUT_MESH_FILENAME				"input_mesh_filename"
@@ -19,7 +25,7 @@
 #define OUTPUT_SH_COEFF_FILENAME			"output_sh_coeff_filename"
 #define OUTPUT_ALBEDO_MESH_FILENAME			"output_albedo_mesh_filename"
 #define OUTPUT_SHADING_MESH_FILENAME		"output_shading_mesh_filename"
-#define OUTPUT_LOCAL_LIGHTING_MESH_FILENAME	"output_shading_mesh_filename"
+#define OUTPUT_LOCAL_LIGHTING_MESH_FILENAME	"output_local_lighting_mesh_filename"
 #define OUTPUT_EST_INTENSITY_MESH_FILENAME	"output_est_intensity_mesh_filename"
 #define OUTPUT_ORIG_INTENSITY_MESH_FILENAME	"output_orig_intensity_mesh_filename"
 
@@ -177,7 +183,7 @@ using namespace std;
 
 			if (!node[USE_APPROXIMATE_EIGENVALUE_BFGS_SCALING].empty())
 			{
-				vector<bool> aux_vector;
+				vector<int> aux_vector;
 				node[USE_APPROXIMATE_EIGENVALUE_BFGS_SCALING] >> aux_vector;
 				for (size_t i = 0; i < aux_vector.size(); ++i)
 				{
@@ -307,7 +313,7 @@ using namespace std;
 
 			if (!node[USE_NONMONOTONIC_STEPS].empty())
 			{
-				vector<bool> aux_vector;
+				vector<int> aux_vector;
 				node[USE_NONMONOTONIC_STEPS] >> aux_vector;
 				for (size_t i = 0; i < aux_vector.size(); ++i)
 				{
@@ -524,7 +530,7 @@ using namespace std;
 
 			if (!node[USE_EXPLICIT_SCHUR_COMPLEMENT].empty())
 			{
-				vector<bool> aux_vector;
+				vector<int> aux_vector;
 				node[USE_EXPLICIT_SCHUR_COMPLEMENT] >> aux_vector;
 				for (size_t i = 0; i < aux_vector.size(); ++i)
 				{
@@ -534,7 +540,7 @@ using namespace std;
 
 			if (!node[USE_POSTORDERING].empty())
 			{
-				vector<bool> aux_vector;
+				vector<int> aux_vector;
 				node[USE_POSTORDERING] >> aux_vector;
 				for (size_t i = 0; i < aux_vector.size(); ++i)
 				{
@@ -544,7 +550,7 @@ using namespace std;
 
 			if (!node[DYNAMIC_SPARSITY].empty())
 			{
-				vector<bool> aux_vector;
+				vector<int> aux_vector;
 				node[DYNAMIC_SPARSITY] >> aux_vector;
 				for (size_t i = 0; i < aux_vector.size(); ++i)
 				{
@@ -584,7 +590,7 @@ using namespace std;
 
 			if (!node[JACOBI_SCALING].empty())
 			{
-				vector<bool> aux_vector;
+				vector<int> aux_vector;
 				node[JACOBI_SCALING] >> aux_vector;
 				for (size_t i = 0; i < aux_vector.size(); ++i)
 				{
@@ -594,7 +600,7 @@ using namespace std;
 
 			if (!node[USE_INNER_ITERATIONS].empty())
 			{
-				vector<bool> aux_vector;
+				vector<int> aux_vector;
 				node[USE_INNER_ITERATIONS] >> aux_vector;
 				for (size_t i = 0; i < aux_vector.size(); ++i)
 				{
@@ -625,7 +631,7 @@ using namespace std;
 
 			if (!node[MINIMIZER_PROGRESS_TO_STDOUT].empty())
 			{
-				vector<bool> aux_vector;
+				vector<int> aux_vector;
 				node[MINIMIZER_PROGRESS_TO_STDOUT] >> aux_vector;
 				for (size_t i = 0; i < aux_vector.size(); ++i)
 				{
@@ -657,7 +663,7 @@ using namespace std;
 
 			if (!node[CHECK_GRADIENTS].empty())
 			{
-				vector<bool> aux_vector;
+				vector<int> aux_vector;
 				node[CHECK_GRADIENTS] >> aux_vector;
 				for (size_t i = 0; i < aux_vector.size(); ++i)
 				{
@@ -689,7 +695,7 @@ using namespace std;
 
 			if (!node[UPDATE_STATE_EVERY_ITERATION].empty())
 			{
-				vector<bool> aux_vector;
+				vector<int> aux_vector;
 				node[UPDATE_STATE_EVERY_ITERATION] >> aux_vector;
 				for (size_t i = 0; i < aux_vector.size(); ++i)
 				{
@@ -707,15 +713,21 @@ using namespace std;
 		Parameters() {
 			sh_order = 2;
 
-			color_diff_threshold = 1.0;
-			color_diff_std = 1.0;
-			normal_diff_std = 1.0;
+			albedo_percentile = 0.98;
+			color_diff_threshold = 0.5;
+			color_diff_var = 0.05;
+			normal_diff_var = 50;
 
-			smooth_albedo_weight = 1.0;
+			use_depth_weight = true;
+
+			smooth_albedo_weight = 0.1;
 			smooth_local_lighting_weight = 1.0;
 			local_lighting_magnitude_weight = 1.0;
-			displacement_weight = 1.0;
-			laplacian_smoooth_weight = 1.0;
+			displacement_weight = 4e-3;
+			laplacian_smooth_weight = 7.5e-3;
+			tv_weight = 7.5e-3;
+
+			data_huber_width.resize(NUM_OPTIMIZATIONS, 0);
 			
 			input_mesh_filename = "C:/Users/Qi/Desktop/generated/mesh_0180_albedo_0001.ply";
 
@@ -748,15 +760,21 @@ using namespace std;
 
 		int sh_order;
 
+		double albedo_percentile;
 		double color_diff_threshold;
-		double color_diff_std;
-		double normal_diff_std;
+		double color_diff_var;
+		double normal_diff_var;
+
+		bool use_depth_weight;
 
 		double smooth_albedo_weight;
 		double smooth_local_lighting_weight;
 		double local_lighting_magnitude_weight;
 		double displacement_weight;
-		double laplacian_smoooth_weight;
+		double laplacian_smooth_weight;
+		double tv_weight;
+
+		vector<double> data_huber_width;
 
 		string input_mesh_filename;
 
@@ -794,19 +812,64 @@ using namespace std;
 				fs[SH_ORDER] >> sh_order;
 			}
 
+			if (!fs[ALBEDO_PERCENTILE].empty())
+			{
+				fs[ALBEDO_PERCENTILE] >> albedo_percentile;
+			}
+
 			if (!fs[COLOR_DIFF_THRESHOLD].empty())
 			{
 				fs[COLOR_DIFF_THRESHOLD] >> color_diff_threshold;
 			}
 
-			if (!fs[COLOR_DIFF_STD].empty())
+			if (!fs[COLOR_DIFF_VAR].empty())
 			{
-				fs[COLOR_DIFF_STD] >> color_diff_std;
+				fs[COLOR_DIFF_VAR] >> color_diff_var;
 			}
 
-			if (!fs[NORMAL_DIFF_STD].empty())
+			if (!fs[NORMAL_DIFF_VAR].empty())
 			{
-				fs[NORMAL_DIFF_STD] >> normal_diff_std;
+				fs[NORMAL_DIFF_VAR] >> normal_diff_var;
+			}
+
+			if (!fs[USE_DEPTH_WEIGHT].empty())
+			{
+				fs[USE_DEPTH_WEIGHT] >> use_depth_weight;
+			}
+
+			if (!fs[SMOOTH_ALBEDO_WEIGHT].empty())
+			{
+				fs[SMOOTH_ALBEDO_WEIGHT] >> smooth_albedo_weight;
+			}
+
+			if (!fs[SMOOTH_LOCAL_LIGHTING_WEIGHT].empty())
+			{
+				fs[SMOOTH_LOCAL_LIGHTING_WEIGHT] >> smooth_local_lighting_weight;
+			}
+
+			if (!fs[LOCAL_LIGHTING_MAGNITUDE_WEIGHT].empty())
+			{
+				fs[LOCAL_LIGHTING_MAGNITUDE_WEIGHT] >> local_lighting_magnitude_weight;
+			}
+
+			if (!fs[DISPLACEMENT_WEIGHT].empty())
+			{
+				fs[DISPLACEMENT_WEIGHT] >> displacement_weight;
+			}
+
+			if (!fs[LAPLACIAN_SMOOTH_WEIGHT].empty())
+			{
+				fs[LAPLACIAN_SMOOTH_WEIGHT] >> laplacian_smooth_weight;
+			}
+
+			if (!fs[TV_WEIGHT].empty())
+			{
+				fs[TV_WEIGHT] >> tv_weight;
+			}
+
+			if (!fs[DATA_HUBER_WIDTH].empty())
+			{
+				fs[DATA_HUBER_WIDTH] >> data_huber_width;
 			}
 
 			if (!fs[INPUT_MESH_FILENAME].empty())
@@ -827,6 +890,11 @@ using namespace std;
 			if (!fs[OUTPUT_SHADING_MESH_FILENAME].empty())
 			{
 				fs[OUTPUT_SHADING_MESH_FILENAME] >> output_shading_mesh_filename;
+			}
+
+			if (!fs[OUTPUT_LOCAL_LIGHTING_MESH_FILENAME].empty())
+			{
+				fs[OUTPUT_LOCAL_LIGHTING_MESH_FILENAME] >> output_local_lighting_mesh_filename;
 			}
 
 			if (!fs[OUTPUT_EST_INTENSITY_MESH_FILENAME].empty())
@@ -878,36 +946,6 @@ using namespace std;
 			{
 				fs[CERES_SOLVER] >> ceres_solver;
 			}
-
-			//if (!fs[MAX_SHADING].empty())
-			//{
-			//	fs[MAX_SHADING] >> max_shading;
-			//}
-
-			//if (!fs[MODE].empty())
-			//{
-			//	fs[MODE] >> mode;
-			//}
-
-			//if (!fs[INPUT_SH_COEFF_FILENAME].empty())
-			//{
-			//	fs[INPUT_SH_COEFF_FILENAME] >> input_sh_coeff_filename;
-			//}
-
-			//if (!fs[MIN_GRAY].empty())
-			//{
-			//	fs[MIN_GRAY] >> min_gray;
-			//}
-
-			//if (!fs[MAX_GRAY].empty())
-			//{
-			//	fs[MAX_GRAY] >> max_gray;
-			//}
-
-			//if (!fs[USE_MASK_VALUES].empty())
-			//{
-			//	fs[USE_MASK_VALUES] >> use_mask_values;
-			//}
 		}
 
 		inline void Parameters::save(const std::string &_filename)

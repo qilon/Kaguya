@@ -1,0 +1,136 @@
+%YAML:1.0
+sh_order: 1
+
+albedo_percentile: 0.98
+color_diff_threshold: 0.5
+color_diff_var: 0.05
+normal_diff_var: 50
+
+use_depth_weight: 1
+
+smooth_albedo_weight: 1e-1
+
+smooth_local_lighting_weight: 1
+local_lighting_magnitude_weight: 1
+
+displacement_weight: 4e-3
+laplacian_smooth_weight: 7.5e-3
+tv_weight: 7.5e-3
+
+input_mesh_filename: 'C:/Users/Qi/Documents/GitHub/data/levi/templates/no_holes/original/smooth/template_50000.ply'
+
+output_sh_coeff_filename: 'C:/Users/Qi/Documents/GitHub/results/Kaguya/test1/sh_coeff.txt'
+output_albedo_mesh_filename: 'C:/Users/Qi/Documents/GitHub/results/Kaguya/test1/albedo.ply'
+output_shading_mesh_filename: 'C:/Users/Qi/Documents/GitHub/results/Kaguya/test1/shading.ply'
+output_local_lighting_mesh_filename: 'C:/Users/Qi/Documents/GitHub/results/Kaguya/test1/local_lighting.ply'
+output_est_intensity_mesh_filename: 'C:/Users/Qi/Documents/GitHub/results/Kaguya/test1/est_intensity.ply'
+output_orig_intensity_mesh_filename: 'C:/Users/Qi/Documents/GitHub/results/Kaguya/test1/orig_intensity.ply'
+
+save_sh_coeff: 1
+save_albedo: 1
+save_shading: 1
+save_local_lighting: 1
+save_est_intensity: 1
+save_orig_intensity: 1
+save_mesh_binary: 1
+
+ceres_solver:
+  # 0 - LINE_SEARCH
+  # 1 - TRUST_REGION
+  minimizer_type: [1, 1, 1, 1]
+
+  # 0 - STEEPEST_DESCENT
+  # 1 - NONLINEAR_CONJUGATE_GRADIENT
+  # 2 - LBFGS
+  # 3 - BFGS
+  line_search_direction_type: [2, 2, 2, 2]
+
+  # 0 - ARMIJO
+  # 1 - WOLFE
+  line_search_type: [1, 1, 1, 1]
+
+  # 0 - FLETCHER_REEVES
+  # 1 - POLAK_RIBIERE
+  # 2 - HESTENES_STIEFEL
+  nonlinear_conjugate_gradient_type: [0, 0, 0, 0]
+
+  # max_lbfgs_rank: 
+  # use_approximate_eigenvalue_bfgs_scaling: 
+
+  # 0 - BISECTION
+  # 1 - QUADRATIC
+  # 2 - CUBIC
+  line_search_interpolation_type: [2, 2, 2, 2]
+
+  # min_line_search_step_size: 
+  # line_search_sufficient_function_decrease: 
+  # max_line_search_step_contraction: 
+  # min_line_search_step_contraction: 
+  # max_num_line_search_step_size_iterations: 
+  # max_num_line_search_direction_restarts: 
+  # line_search_sufficient_curvature_decrease: 
+  # max_line_search_step_expansion: 
+
+  # 0 - LEVENBERG_MARQUARDT
+  # 1 - DOGLEG
+  trust_region_strategy_type: [0, 0, 0, 0]
+
+  # dogleg_type: 
+  # use_nonmonotonic_steps: 
+  # max_consecutive_nonmonotonic_steps: 
+  max_num_iterations: [100, 100, 100, 100]
+  # max_solver_time_in_seconds: 
+  num_threads: [8, 8, 8, 8]
+  initial_trust_region_radius: [1e4, 1e4, 1e4, 1e4]
+  max_trust_region_radius: [1e8, 1e8, 1e8, 1e8]
+  min_trust_region_radius: [1e-32, 1e-32, 1e-32, 1e-32]
+  min_relative_decrease: [1e-3, 1e-3, 1e-3, 1e-3]
+  # min_lm_diagonal: 
+  # max_lm_diagonal: 
+  max_num_consecutive_invalid_steps: [0, 0, 0, 0]
+  function_tolerance: [1e-4, 1e-4, 1e-4, 1e-4]
+  # function_tolerance: [1e-6, 1e-1, 1e-1, 1e-1]
+  gradient_tolerance: [1e-3, 1e-3, 1e-3, 1e-3]
+  parameter_tolerance: [1e-10, 1e-10, 1e-10, 1e-10]
+
+  # 0 - DENSE_NORMAL_CHOLESKY
+  # 1 - DENSE_QR
+  # 2 - SPARSE_NORMAL_CHOLESKY
+  # 3 - DENSE_SCHUR
+  # 4 - SPARSE_SCHUR
+  # 5 - ITERATIVE_SCHUR
+  # 6 - CGNR
+  linear_solver_type: [6, 6, 6, 6]
+
+  # 0 - IDENTITY
+  # 1 - JACOBI
+  # 2 - SCHUR_JACOBI
+  # 3 - CLUSTER_JACOBI
+  # 4 - CLUSTER_TRIDIAGONAL
+  preconditioner_type: [1, 1, 1, 1]
+
+  # visibility_clustering_type: 
+  # dense_linear_algebra_library_type: 
+  # sparse_linear_algebra_library_type: 
+  num_linear_solver_threads: [8, 8, 8, 8]
+  # use_explicit_schur_complement: 
+  # use_postordering: 
+  # dynamic_sparsity: 
+  # min_linear_solver_iterations: 
+  # max_linear_solver_iterations: 
+  # eta: 
+  # jacobi_scaling: 
+  # use_inner_iterations: 
+  # inner_iteration_tolerance: 
+
+  # 0 - SILENT
+  # 1 - PER_MINIMIZER_ITERATION
+  logging_type: [1, 1, 1, 1]
+
+  # minimizer_progress_to_stdout: 
+  # trust_region_problem_dump_directory: 
+  # trust_region_problem_dump_format_type: 
+  # check_gradients: 
+  # gradient_check_relative_precision: 
+  # numeric_derivative_relative_step_size: 
+  update_state_every_iteration: [0, 0, 0, 0]

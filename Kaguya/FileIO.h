@@ -2,36 +2,36 @@
 
 #include "MyMesh.h"
 //=============================================================================
-int writeMesh(const MyMesh& _mesh, const string &_filename,
+bool writeMesh(const MyMesh& _mesh, const string &_filename,
 	const OpenMesh::IO::Options _wopt);
 //=============================================================================
-int readMesh(MyMesh& _mesh, const string &_filename,
+bool readMesh(MyMesh& _mesh, const string &_filename,
 	OpenMesh::IO::Options _ropt);
 //=============================================================================
-inline int readMesh(MyMesh& _mesh, const string &_filename,
+inline bool readMesh(MyMesh& _mesh, const string &_filename,
 	OpenMesh::IO::Options _ropt)
 {
 	if (!OpenMesh::IO::read_mesh(_mesh, _filename, _ropt))
 	{
 		std::cout << "Could not read file: " << _filename << std::endl << std::endl;
 
-		return -1;
+		return false;
 	}
 
-	return 0;
+	return true;
 }
 //=============================================================================
-inline int writeMesh(const MyMesh& _mesh, const string &_filename,
+inline bool writeMesh(const MyMesh& _mesh, const string &_filename,
 	const OpenMesh::IO::Options _wopt)
 {
 	if (!OpenMesh::IO::write_mesh(_mesh, _filename, _wopt))
 	{
 		std::cout << "Could not write file: " << _filename << std::endl << std::endl;
 
-		return -1;
+		return false;
 	}
 
-	return 0;
+	return true;
 }
 //=============================================================================
 template<typename T>

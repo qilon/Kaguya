@@ -38,7 +38,10 @@ void BlackBox::initialize(int *argc, char **argv)
 	mesh_read_opt += OpenMesh::IO::Options::VertexColor;
 	mesh_read_opt += OpenMesh::IO::Options::VertexNormal;
 
-	readMesh(mesh, params.input_mesh_filename.c_str(), mesh_read_opt);
+	if (!readMesh(mesh, params.input_mesh_filename.c_str(), mesh_read_opt))
+	{
+		exit(0);
+	}
 
 	mesh.update_normals();
 
@@ -65,6 +68,8 @@ void BlackBox::run()
 	albedos.resize(n_vertices, white);
 	local_lightings.resize(n_vertices, black);
 
+	initDiffWeights();
+
 	estimateSHCoeff(params.ceres_solver.options[0]);
 	estimateAlbedo(params.ceres_solver.options[1]);
 	estimateLocalLighting(params.ceres_solver.options[2]);
@@ -75,6 +80,8 @@ void BlackBox::save()
 {
 	if (params.save_sh_coeff)
 	{
+		cout << "Writing sh coeff: " << params.output_sh_coeff_filename << endl;
+
 		writeVector(sh_coeff, params.output_sh_coeff_filename.c_str());
 	}
 
@@ -83,6 +90,9 @@ void BlackBox::save()
 
 	if (params.save_orig_intensity)
 	{
+		cout << "Writing mesh: " << params.output_orig_intensity_mesh_filename
+			<< endl;
+
 		writeMesh(mesh, params.output_orig_intensity_mesh_filename, mesh_write_opt);
 	}
 
@@ -90,12 +100,17 @@ void BlackBox::save()
 	{
 		setMeshColors(albedos, mesh);
 
+		cout << "Writing mesh: " << params.output_albedo_mesh_filename << endl;
+
 		writeMesh(mesh, params.output_albedo_mesh_filename, mesh_write_opt);
 	}
 
 	if (params.save_local_lighting)
 	{
 		setMeshColors(local_lightings, mesh);
+
+		cout << "Writing mesh: " << params.output_local_lighting_mesh_filename
+			<< endl;
 
 		writeMesh(mesh, params.output_local_lighting_mesh_filename, mesh_write_opt);
 	}
@@ -107,6 +122,8 @@ void BlackBox::save()
 	{
 		setMeshColors(shadings, mesh);
 
+		cout << "Writing mesh: " << params.output_shading_mesh_filename << endl;
+
 		writeMesh(mesh, params.output_shading_mesh_filename, mesh_write_opt);
 	}
 
@@ -116,6 +133,9 @@ void BlackBox::save()
 		computeEstIntensity(albedos, shadings, local_lightings, est_intensities);
 
 		setMeshColors(est_intensities, mesh);
+
+		cout << "Writing mesh: " << params.output_est_intensity_mesh_filename
+			<< endl;
 
 		writeMesh(mesh, params.output_est_intensity_mesh_filename, mesh_write_opt);
 	}
@@ -164,13 +184,14 @@ void BlackBox::initFromMesh(MyMesh& _mesh)
 
 		Color color(3);
 		MyMesh::Color c = vector_cast<MyMesh::Color>(_mesh.color(*v_it));
-		color[0] = c[0];
-		color[1] = c[1];
-		color[2] = c[2];
-		colors[v_idx] = std::move(color);
+		color[0] = (double)c[0] / 255.0;
+		color[1] = (double)c[1] / 255.0;
+		color[2] = (double)c[2] / 255.0;
 
 		Intensity gray = rgb2gray(color);
 		grays[v_idx] = gray;
+
+		colors[v_idx] = std::move(color);
 
 		vector<VertexIndex> v_idxs;
 		MyMesh::ConstVertexVertexIter vv_it;
@@ -196,7 +217,7 @@ void BlackBox::initFromMesh(MyMesh& _mesh)
 	// Copy face vertices
 	MyMesh::ConstFaceIter f_it;
 	MyMesh::ConstFaceIter f_end = _mesh.faces_end();
-	for (f_it = _mesh.faces_begin(); f_it != f_end; ++f_end)
+	for (f_it = _mesh.faces_begin(); f_it != f_end; ++f_it)
 	{
 		FaceIndex f_idx = f_it->idx();
 
@@ -255,7 +276,7 @@ Intensity BlackBox::computeShading(const Normal &_normal,
 
 	vector<Intensity> sh_functions;
 	sh_functions.reserve(_sh_coeff.size());
-	if (_sh_order > -1)
+	if (_sh_order >= 0)
 	{
 		sh_functions.push_back(1);
 	}
@@ -320,7 +341,7 @@ void BlackBox::computeEstIntensity(const vector<Color> &_albedos,
 		Color est_intensity(3);
 		for (size_t j = 0; j < 3; j++)
 		{
-			est_intensity[0] = 
+			est_intensity[j] = 
 				_albedos[i][j] * _shadings[i] + _local_lightings[i][j];
 		}
 		_est_intensities.push_back(est_intensity);
@@ -349,7 +370,11 @@ void BlackBox::setMeshColors(const vector<Color> &_colors, MyMesh &_mesh)
 	{
 		int i = v_it->idx();
 
-		MyMesh::Color c(_colors[i][0], _colors[i][1], _colors[i][2]);
+		MyMesh::Color c(
+			(unsigned char)(_colors[i][0] * 255.0), 
+			(unsigned char)(_colors[i][1] * 255.0),
+			(unsigned char)(_colors[i][2] * 255.0)
+			);
 		mesh.set_color(*v_it, c);
 	}
 }
@@ -363,7 +388,11 @@ void BlackBox::setMeshColors(const vector<Intensity> &_intensities, MyMesh &_mes
 	{
 		int i = v_it->idx();
 
-		MyMesh::Color c(_intensities[i], _intensities[i], _intensities[i]);
+		MyMesh::Color c(
+			(unsigned char)(_intensities[i] * 255.0), 
+			(unsigned char)(_intensities[i] * 255.0), 
+			(unsigned char)(_intensities[i] * 255.0)
+			);
 		mesh.set_color(*v_it, c);
 	}
 }
@@ -525,8 +554,9 @@ void BlackBox::initDiffWeights()
 		{
 			unsigned int adj_v_idx = adj_vertices[i][j];
 			Intensity weight = computeDiffWeight(colors[i], colors[adj_v_idx],
-				normals[i], normals[adj_v_idx], params.color_diff_threshold,
-				params.color_diff_std, params.normal_diff_std);
+				normals[i], normals[adj_v_idx], vertices[i], vertices[adj_v_idx],
+				params.color_diff_threshold, params.color_diff_var, 
+				params.normal_diff_var);
 			weights.push_back(weight);
 		}
 		diff_weights[i] = std::move(weights);
@@ -534,8 +564,9 @@ void BlackBox::initDiffWeights()
 }
 //=============================================================================
 Intensity BlackBox::computeDiffWeight(Color &_color1, Color &_color2,
-	Normal &_normal1, Normal &_normal2, Intensity _color_diff_threshold,
-	Intensity _color_diff_std, Coordinate _normal_diff_std)
+	Normal &_normal1, Normal &_normal2, Vertex &_vertex1, Vertex &_vertex2, 
+	Intensity _color_diff_threshold, Intensity _color_diff_var, 
+	Coordinate _normal_diff_var)
 {
 	Intensity weight = 0.0;
 
@@ -546,11 +577,19 @@ Intensity BlackBox::computeDiffWeight(Color &_color1, Color &_color2,
 
 	if (color_diff_norm2 <= _color_diff_threshold)
 	{
-		weight = exp(color_diff_norm2 / (2 * pow(_color_diff_std, 2)));
+		weight = exp(color_diff_norm2 / (2 * _color_diff_var));
 
-		Coordinate normal_diff_cos = _normal1[0] * _normal2[0]
-			+ _normal1[1] * _normal2[1] + _normal1[2] * _normal2[2];
-		weight *= exp((1 - normal_diff_cos) / (2 * pow(_normal_diff_std, 2)));
+		if (params.use_depth_weight)
+		{
+			Coordinate depth_diff = _vertex1[2] - _vertex2[2];
+			weight *= exp(pow(depth_diff, 2) / (2 * _normal_diff_var));
+		}
+		else
+		{
+			Coordinate normal_diff_cos = _normal1[0] * _normal2[0]
+				+ _normal1[1] * _normal2[1] + _normal1[2] * _normal2[2];
+			weight *= exp((1 - normal_diff_cos) / (2 * _normal_diff_var));
+		}
 	}
 
 	return weight;
@@ -558,8 +597,14 @@ Intensity BlackBox::computeDiffWeight(Color &_color1, Color &_color2,
 //=============================================================================
 void BlackBox::estimateSHCoeff(const ceres::Solver::Options &_options)
 {
-	Color white = { 1.0, 1.0, 1.0 };
-	Color black = { 0.0, 0.0, 0.0 };
+	Intensity black = 0.0;
+	Intensity white;
+	{
+		vector<Intensity> aux_grays = grays;
+		unsigned int nth = (unsigned int)(params.albedo_percentile * (double)aux_grays.size());
+		nth_element(aux_grays.begin(), aux_grays.begin() + nth, aux_grays.end());
+		white = aux_grays[nth-1];
+	}
 
 	ceres::Problem problem;
 
@@ -577,13 +622,13 @@ void BlackBox::estimateSHCoeff(const ceres::Solver::Options &_options)
 
 		// White albedo
 		dyn_cost_function->AddParameterBlock(1);
-		v_parameter_blocks.push_back(&white[0]);
+		v_parameter_blocks.push_back(&white);
 		// SH Coeff
 		dyn_cost_function->AddParameterBlock(n_sh_basis);
 		v_parameter_blocks.push_back(&sh_coeff[0]);
 		// Local lighting variations
 		dyn_cost_function->AddParameterBlock(1);
-		v_parameter_blocks.push_back(&black[0]);
+		v_parameter_blocks.push_back(&black);
 		// Vertex
 		dyn_cost_function->AddParameterBlock(3);
 		v_parameter_blocks.push_back(&vertices[i][0]);
@@ -603,8 +648,8 @@ void BlackBox::estimateSHCoeff(const ceres::Solver::Options &_options)
 			v_parameter_blocks);
 	}
 
-	problem.SetParameterBlockConstant(&white[0]);
-	problem.SetParameterBlockConstant(&black[0]);
+	problem.SetParameterBlockConstant(&white);
+	problem.SetParameterBlockConstant(&black);
 	for (size_t i = 0; i < n_vertices; ++i)
 	{
 		problem.SetParameterBlockConstant(&vertices[i][0]);
@@ -635,13 +680,13 @@ void BlackBox::estimateAlbedo(const ceres::Solver::Options &_options)
 		// List of pointers to translations per vertex
 		vector<Intensity*> v_parameter_blocks;
 
-		// White albedo
+		// Albedo
 		dyn_cost_function->AddParameterBlock(3);
 		v_parameter_blocks.push_back(&albedos[i][0]);
 		// SH Coeff
 		dyn_cost_function->AddParameterBlock(n_sh_basis);
 		v_parameter_blocks.push_back(&sh_coeff[0]);
-		// Local lighting variations
+		// No local lighting variations
 		dyn_cost_function->AddParameterBlock(3);
 		v_parameter_blocks.push_back(&black[0]);
 		// Vertex
@@ -655,7 +700,7 @@ void BlackBox::estimateAlbedo(const ceres::Solver::Options &_options)
 			v_parameter_blocks.push_back(&vertices[v_idx][0]);
 		}
 
-		dyn_cost_function->SetNumResiduals(1);
+		dyn_cost_function->SetNumResiduals(3);
 
 		ceres::ResidualBlockId residualBlockId = problem.AddResidualBlock(
 			dyn_cost_function,
@@ -730,7 +775,7 @@ void BlackBox::estimateLocalLighting(const ceres::Solver::Options &_options)
 		// List of pointers to translations per vertex
 		vector<Intensity*> v_parameter_blocks;
 
-		// White albedo
+		// Albedo
 		dyn_cost_function->AddParameterBlock(3);
 		v_parameter_blocks.push_back(&albedos[i][0]);
 		// SH Coeff
@@ -811,6 +856,10 @@ void BlackBox::estimateLocalLighting(const ceres::Solver::Options &_options)
 	{
 		problem.SetParameterBlockConstant(&vertices[i][0]);
 		problem.SetParameterBlockConstant(&albedos[i][0]);
+
+		problem.SetParameterLowerBound(&local_lightings[i][0], 0, 0.0);
+		problem.SetParameterLowerBound(&local_lightings[i][0], 1, 0.0);
+		problem.SetParameterLowerBound(&local_lightings[i][0], 2, 0.0);
 	}
 
 	ceres::Solver::Summary summary;
@@ -824,6 +873,8 @@ void BlackBox::estimateShape(const ceres::Solver::Options &_options)
 {
 	ceres::Problem problem;
 
+	vector<Vertex> initial_vertices = vertices;
+
 	for (size_t i = 0; i < n_vertices; i++)
 	{
 		ResidualPhotometricError *residual = new ResidualPhotometricError(
@@ -836,7 +887,7 @@ void BlackBox::estimateShape(const ceres::Solver::Options &_options)
 		// List of pointers to translations per vertex
 		vector<Intensity*> v_parameter_blocks;
 
-		// White albedo
+		// Albedo
 		dyn_cost_function->AddParameterBlock(3);
 		v_parameter_blocks.push_back(&albedos[i][0]);
 		// SH Coeff
@@ -870,7 +921,8 @@ void BlackBox::estimateShape(const ceres::Solver::Options &_options)
 			NULL, params.displacement_weight, ceres::TAKE_OWNERSHIP);
 		for (size_t i = 0; i < n_vertices; i++)
 		{
-			ResidualInitialVertexDiff *residual = new ResidualInitialVertexDiff(vertices[i]);
+			ResidualInitialVertexDiff *residual = 
+				new ResidualInitialVertexDiff(initial_vertices[i]);
 
 			ceres::AutoDiffCostFunction<ResidualInitialVertexDiff, 3, 3>* cost_function =
 				new ceres::AutoDiffCostFunction<ResidualInitialVertexDiff, 3, 3>(residual);
@@ -882,10 +934,10 @@ void BlackBox::estimateShape(const ceres::Solver::Options &_options)
 		}
 	}
 
-	if (params.laplacian_smoooth_weight > 0.0)
+	if (params.laplacian_smooth_weight > 0.0)
 	{
 		ceres::ScaledLoss* loss_function = new ceres::ScaledLoss(
-			NULL, params.laplacian_smoooth_weight, ceres::TAKE_OWNERSHIP);
+			NULL, params.laplacian_smooth_weight, ceres::TAKE_OWNERSHIP);
 		for (size_t i = 0; i < n_vertices; i++)
 		{
 			ResidualLaplacianSmoothing *residual 
@@ -908,12 +960,37 @@ void BlackBox::estimateShape(const ceres::Solver::Options &_options)
 				v_parameter_blocks.push_back(&vertices[v_idx][0]);
 			}
 
-			dyn_cost_function->SetNumResiduals(3);
+			dyn_cost_function->SetNumResiduals(1);
 
 			ceres::ResidualBlockId residualBlockId = problem.AddResidualBlock(
 				dyn_cost_function,
 				loss_function,
 				v_parameter_blocks);
+		}
+	}
+
+	if (params.tv_weight > 0.0)
+	{
+		ceres::ScaledLoss* loss_function = new ceres::ScaledLoss(
+			NULL, params.tv_weight, ceres::TAKE_OWNERSHIP);
+		for (size_t i = 0; i < n_vertices; i++)
+		{
+			for (size_t j = 0; j < adj_vertices[i].size(); j++)
+			{
+				int v_idx = adj_vertices[i][j];
+
+				ResidualTV *residual = new ResidualTV(
+					initial_vertices[i], initial_vertices[v_idx]);
+
+				ceres::AutoDiffCostFunction<ResidualTV, 3, 3, 3>* cost_function =
+					new ceres::AutoDiffCostFunction<ResidualTV, 3, 3, 3>(residual);
+
+				ceres::ResidualBlockId residualBlockId = problem.AddResidualBlock(
+					cost_function,
+					loss_function,
+					&vertices[i][0],
+					&vertices[v_idx][0]);
+			}
 		}
 	}
 

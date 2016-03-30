@@ -22,7 +22,7 @@ struct Traits
 	typedef int TextureIndex;
 
 	/// The default color type is OpenMesh::Vec3uc.
-	typedef OpenMesh::Vec3d Color;
+	typedef OpenMesh::Vec3uc Color;
 
 #ifndef DOXY_IGNORE_THIS
 	VertexTraits{};

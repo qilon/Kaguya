@@ -118,7 +118,7 @@ public:
 			unsigned int vIdx2 = (i + 1) % adjP.size();
 
 			T face_normal[3];
-			compnorm(p, adjP[vIdx1], adjP[vIdx2], face_normal, false);
+			compnorm(p, adjP[vIdx1], adjP[vIdx2], face_normal);
 
 			normal[0] += face_normal[0];
 			normal[1] += face_normal[1];
@@ -273,7 +273,7 @@ private:
 class ResidualInitialVertexDiff
 {
 public:
-	ResidualInitialVertexDiff(const Vertex _vertex0) :
+	ResidualInitialVertexDiff(const Vertex &_vertex0) :
 		vertex0(_vertex0)
 	{
 
@@ -293,7 +293,7 @@ public:
 
 private:
 	// Initial vertex
-	const Vertex vertex0;
+	const Vertex &vertex0;
 };
 
 // Laplacian smoothing residual
@@ -413,4 +413,32 @@ public:
 private:
 	// Number of adjacent vertices
 	const unsigned int n_adj_vertices;
+};
+
+// Residual Total Variation
+class ResidualTV
+{
+public:
+	ResidualTV(Vertex &_vertex1, Vertex &_vertex2) :
+		vertex1(_vertex1),
+		vertex2(_vertex2)
+	{
+
+	}
+
+	template <typename T>
+	bool operator()(const T* const _vertex1, const T* const _vertex2,
+		T* residuals) const
+	{
+		for (size_t i = 0; i < 3; ++i)
+		{
+			residuals[i] = (_vertex1[i] - _vertex2[i]) 
+				- (T(vertex1[i]) - T(vertex2[i]));
+		}
+
+		return true;
+	}
+
+private:
+	Vertex &vertex1, &vertex2;
 };

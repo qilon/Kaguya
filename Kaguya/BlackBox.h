@@ -50,8 +50,9 @@ private:
 
 	static void initDiffWeights();
 	static Intensity computeDiffWeight(Color &_color1, Color &_color2, 
-		Normal &_normal1, Normal &_normal2, Intensity _color_diff_threshold,
-		Intensity _color_diff_std, Coordinate _normal_diff_std);
+		Normal &_normal1, Normal &_normal2, Vertex &_vertex1, Vertex &_vertex2, 
+		Intensity _color_diff_threshold, Intensity _color_diff_var, 
+		Coordinate _normal_diff_var);
 
 	static void estimateSHCoeff(const ceres::Solver::Options &_options);
 	static void estimateAlbedo(const ceres::Solver::Options &_options);
