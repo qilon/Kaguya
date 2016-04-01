@@ -10,12 +10,14 @@ public:
 		const unsigned int _n_channels,
 		const unsigned int &_n_adj_vertices, 
 		const unsigned int &_n_adj_faces,
-		const unsigned int _sh_order) :
+		const unsigned int _sh_order,
+		const bool _optimize_using_normal = false) :
 		intensity(_intensity),
 		n_channels(_n_channels),
 		n_adj_vertices(_n_adj_vertices),
 		n_adj_faces(_n_adj_faces),
-		sh_order(_sh_order)
+		sh_order(_sh_order),
+		optimize_using_normal(_optimize_using_normal)
 	{
 
 	}
@@ -27,16 +29,77 @@ public:
 		const T* sh_coeff = parameters[1];
 		const T* lighting_variation = parameters[2];
 		const T* vertex = parameters[3];
+		T* v = new T[3];
+		v[0] = vertex[0];
+		v[1] = vertex[1];
+		v[2] = vertex[2];
+
+		unsigned int param_idx = 4;
 
 		vector<const T*> adj_vertices;
+		adj_vertices.reserve(n_adj_vertices);
+
+		vector<T*> adj_v;
+		adj_v.reserve(n_adj_vertices);
+
 		for (size_t i = 0; i < n_adj_vertices; i++)
 		{
-			const T* v_neighbour = parameters[4 + i];
+			const T* v_neighbour = parameters[param_idx];
 			adj_vertices.push_back(v_neighbour);
+
+			T* v_n = new T[3];
+			v_n[0] = v_neighbour[0];
+			v_n[1] = v_neighbour[1];
+			v_n[2] = v_neighbour[2];
+
+			adj_v.push_back(v_n);
+
+			param_idx++;
+		}
+
+		if (optimize_using_normal)
+		{
+			const T *vertex_normal = parameters[param_idx];
+
+			param_idx++;
+
+			vector<const T*> adj_normals;
+			adj_normals.reserve(n_adj_vertices);
+			for (size_t i = 0; i < n_adj_vertices; i++)
+			{
+				const T* v_neighbour_normal = parameters[param_idx];
+				adj_normals.push_back(v_neighbour_normal);
+
+				param_idx++;
+			}
+
+			const T *vertex_disp = parameters[param_idx];
+			v[0] += vertex_disp[0] * vertex_normal[0];
+			v[1] += vertex_disp[0] * vertex_normal[1];
+			v[2] += vertex_disp[0] * vertex_normal[2];
+
+			param_idx++;
+
+			for (size_t i = 0; i < n_adj_vertices; i++)
+			{
+				const T* v_neighbour_disp = parameters[param_idx];
+
+				adj_v[i][0] += v_neighbour_disp[0] * adj_normals[i][0];
+				adj_v[i][1] += v_neighbour_disp[0] * adj_normals[i][1];
+				adj_v[i][2] += v_neighbour_disp[0] * adj_normals[i][2];
+
+				param_idx++;
+			}
 		}
 
 		T normal[3];
-		computeNormal(vertex, adj_vertices, n_adj_faces, false, normal);
+		computeNormal(&v[0], adj_v, n_adj_faces, false, normal);
+
+		delete[] v;
+		for (size_t i = 0; i < n_adj_vertices; i++)
+		{
+			delete[] adj_v[i];
+		}
 
 		T shading = computeShading(normal, sh_coeff, sh_order);
 
@@ -89,12 +152,12 @@ public:
 		norm[1] = a[2] * b[0] - a[0] * b[2];
 		norm[2] = a[0] * b[1] - a[1] * b[0];
 
-		if (norm[1] * norm[1] + norm[2] * norm[2] + norm[0] * norm[0] != T(0))
+		T normalization = sqrt(norm[1] * norm[1] + norm[2] * norm[2] + norm[0] * norm[0]);
+		if (normalization != T(0.0))
 		{
-			T temp = T(1.0f) / sqrt(norm[1] * norm[1] + norm[2] * norm[2] + norm[0] * norm[0]);
-			norm[0] *= temp;
-			norm[1] *= temp;
-			norm[2] *= temp;
+			norm[0] /= normalization;
+			norm[1] /= normalization;
+			norm[2] /= normalization;
 		}
 
 		location[0] = norm[0];
@@ -105,7 +168,7 @@ public:
 	// Computes vertex normal direction given its position, its one-ring neighbours 
 	// and the corresponding face indexes. Can handle clockwise and counter-clockwise
 	template <typename T>
-	void computeNormal(const T* p, const vector<const T*> &adjP,
+	void computeNormal(const T* p, const vector<T*> &adjP,
 		const int n_faces, const bool clockwise, T* normal) const
 	{
 		normal[0] = T(0.0);
@@ -207,6 +270,9 @@ private:
 
 	// SH order
 	const unsigned int sh_order;
+
+	// Optimize displacement in the direction of the normal
+	const bool optimize_using_normal;
 };
 
 // Residual of difference between values of neighbour vertices
@@ -291,6 +357,15 @@ public:
 		return true;
 	}
 
+	template <typename T>
+	bool operator()(const T* const _vertex, const T* const _vertex_disp,
+		T* residuals) const
+	{
+		residuals[0] = _vertex_disp[0];
+
+		return true;
+	}
+
 private:
 	// Initial vertex
 	const Vertex &vertex0;
@@ -302,8 +377,10 @@ class ResidualLaplacianSmoothing
 public:
 public:
 	ResidualLaplacianSmoothing(
-		const unsigned int _n_adj_vertices) :
-		n_adj_vertices(_n_adj_vertices)
+		const unsigned int _n_adj_vertices, 
+		const bool _optimize_using_normal = false) :
+		n_adj_vertices(_n_adj_vertices), 
+		optimize_using_normal(_optimize_using_normal)
 	{
 
 	}
@@ -315,15 +392,64 @@ public:
 		// 0 - Current vertex position or translation
 		// >0 - Neighbour vertices positions or translations
 
-		const T* p = parameters[0];
+		const T* vertex = parameters[0];
+		T* p = new T[3];
+		p[0] = vertex[0];
+		p[1] = vertex[1];
+		p[2] = vertex[2];
 
-		vector<const T*> adjP;
+		vector<const T*> adj_vertices;
+		adj_vertices.reserve(n_adj_vertices);
+
+		vector<T*> adjP;
 		adjP.reserve(n_adj_vertices);
 		for (size_t i = 0; i < n_adj_vertices; i++)
 		{
 			const T* p_neighbour = parameters[i + 1];
+			adj_vertices.push_back(p_neighbour);
 
-			adjP.push_back(p_neighbour);
+			T* v_neigh = new T[3];
+			v_neigh[0] = p_neighbour[0];
+			v_neigh[1] = p_neighbour[1];
+			v_neigh[2] = p_neighbour[2];
+			adjP.push_back(v_neigh);
+		}
+
+		if (optimize_using_normal)
+		{
+			unsigned int param_idx = 1 + n_adj_vertices;
+
+			const T *vertex_normal = parameters[param_idx];
+
+			param_idx++;
+
+			vector<const T*> adj_normals;
+			adj_normals.reserve(n_adj_vertices);
+			for (size_t i = 0; i < n_adj_vertices; i++)
+			{
+				const T* v_neighbour_normal = parameters[param_idx];
+				adj_normals.push_back(v_neighbour_normal);
+
+				param_idx++;
+			}
+
+			const T *vertex_disp = parameters[param_idx];
+			p[0] += vertex_disp[0] * vertex_normal[0];
+			p[1] += vertex_disp[0] * vertex_normal[1];
+			p[2] += vertex_disp[0] * vertex_normal[2];
+
+			param_idx++;
+
+			for (size_t i = 0; i < n_adj_vertices; i++)
+			{
+				const T* v_neighbour_disp = parameters[param_idx];
+
+				adjP[i][0] += v_neighbour_disp[0] * adj_normals[i][0];
+				adjP[i][1] += v_neighbour_disp[0] * adj_normals[i][1];
+				adjP[i][2] += v_neighbour_disp[0] * adj_normals[i][2];
+
+				param_idx++;
+			}
 		}
 
 		T laplacian_x = T(0.0);
@@ -350,9 +476,20 @@ public:
 			weight_norm += weight;
 		}
 
+		if (weight_norm < T(std::numeric_limits<double>::epsilon()) && weight_norm > T(-std::numeric_limits<double>::epsilon()))
+		{
+			weight_norm = T(std::numeric_limits<double>::epsilon());
+		}
+
 		laplacian_x /= weight_norm;
 		laplacian_y /= weight_norm;
 		laplacian_z /= weight_norm;
+
+		delete[] p;
+		for (size_t i = 0; i < n_adj_vertices; i++)
+		{
+			delete[] adjP[i];
+		}
 
 		residuals[0] = ceres::sqrt(laplacian_x * laplacian_x
 			+ laplacian_y * laplacian_y
@@ -372,6 +509,12 @@ public:
 
 		// Normalize first vector
 		T v1_norm = ceres::sqrt(v1_x * v1_x + v1_y * v1_y + v1_z * v1_z);
+
+		if (v1_norm < T(std::numeric_limits<double>::epsilon()) && v1_norm > T(-std::numeric_limits<double>::epsilon()))
+		{
+			v1_norm = T(std::numeric_limits<double>::epsilon());
+		}
+
 		v1_x /= v1_norm;
 		v1_y /= v1_norm;
 		v1_z /= v1_norm;
@@ -383,6 +526,12 @@ public:
 
 		// Normalize second vector
 		T v2_norm = ceres::sqrt(v2_x * v2_x + v2_y * v2_y + v2_z * v2_z);
+
+		if (v2_norm < T(std::numeric_limits<double>::epsilon()) && v2_norm > T(-std::numeric_limits<double>::epsilon()))
+		{
+			v2_norm = T(std::numeric_limits<double>::epsilon());
+		}
+
 		v2_x /= v2_norm;
 		v2_y /= v2_norm;
 		v2_z /= v2_norm;
@@ -404,6 +553,11 @@ public:
 		//	std::cout << "ERROR!!!!! sin(a) == 0" << endl;
 		//}
 
+		if (sin_a < T(std::numeric_limits<double>::epsilon()) && sin_a > T(-std::numeric_limits<double>::epsilon()))
+		{
+			sin_a = T(std::numeric_limits<double>::epsilon());
+		}
+
 		// cot(a) = cos(a) / sin(a)
 		T cot_a = cos_a / sin_a;
 
@@ -413,13 +567,16 @@ public:
 private:
 	// Number of adjacent vertices
 	const unsigned int n_adj_vertices;
+
+	// Optimize displacement in the direction of the normal
+	const bool optimize_using_normal;
 };
 
 // Residual Total Variation
 class ResidualTV
 {
 public:
-	ResidualTV(Vertex &_vertex1, Vertex &_vertex2) :
+	ResidualTV(const Vertex &_vertex1, const Vertex &_vertex2) :
 		vertex1(_vertex1),
 		vertex2(_vertex2)
 	{
@@ -439,6 +596,23 @@ public:
 		return true;
 	}
 
+	template <typename T>
+	bool operator()(const T* const _vertex1, const T* const _vertex2,
+		const T* const _normal1, const T* const _normal2,
+		const T* const _vertex_disp1, const T* const _vertex_disp2,
+		T* residuals) const
+	{
+		for (size_t i = 0; i < 3; ++i)
+		{
+			residuals[i] = (_vertex1[i] + _vertex_disp1[0] * _normal1[i] 
+				- _vertex2[i] - _vertex_disp2[0] * _normal2[i])
+				- (T(vertex1[i]) - T(vertex2[i]));
+		}
+
+		return true;
+	}
+
+
 private:
-	Vertex &vertex1, &vertex2;
+	const Vertex &vertex1, &vertex2;
 };

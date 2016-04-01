@@ -72,6 +72,8 @@ private:
 	static void setMeshColors(const vector<Color> &_colors, MyMesh &_mesh);
 	static void setMeshColors(const vector<Intensity> &_intensities, MyMesh &_mesh);
 
+	static void updateVertices(vector<double> &_vertices_disp);
+
 public:
 	static void initialize(int *argc, char **argv);
 	static void run();

@@ -475,7 +475,7 @@ void BlackBox::sortAdjacentVerticesAndFaces()
 			{
 				next_idx = (*it).second;
 
-				int neigh_face_index = it - adjFacesVerticesInd.begin();
+				int neigh_face_index = (int)(it - adjFacesVerticesInd.begin());
 				ordered_neigh_faces.push_back(adj_faces[i][neigh_face_index]);
 			}
 			else // the current vertex has not a full ring and we stop 
@@ -512,7 +512,7 @@ void BlackBox::sortAdjacentVerticesAndFaces()
 					next_idx = (*it).first;
 					ordered_neigh_vertices_left.push_back(next_idx);
 
-					int neigh_face_index = it - adjFacesVerticesInd.begin();
+					int neigh_face_index = (int)(it - adjFacesVerticesInd.begin());
 					ordered_neigh_faces_left.push_back(adj_faces[i][neigh_face_index]);
 				}
 				else // there are holes in the neighbour faces of the current vertex
@@ -598,7 +598,9 @@ Intensity BlackBox::computeDiffWeight(Color &_color1, Color &_color2,
 void BlackBox::estimateSHCoeff(const ceres::Solver::Options &_options)
 {
 	Intensity black = 0.0;
-	Intensity white;
+	Intensity white = 1.0;
+
+	if (params.albedo_percentile > 0.0)
 	{
 		vector<Intensity> aux_grays = grays;
 		unsigned int nth = (unsigned int)(params.albedo_percentile * (double)aux_grays.size());
@@ -607,6 +609,13 @@ void BlackBox::estimateSHCoeff(const ceres::Solver::Options &_options)
 	}
 
 	ceres::Problem problem;
+
+	ceres::LossFunction *data_loss_function = NULL;
+	double huber_width = params.data_huber_width[0];
+	if (huber_width > 0.0)
+	{
+		data_loss_function = new ceres::HuberLoss(huber_width);
+	}
 
 	for (size_t i = 0; i < n_vertices; i++)
 	{
@@ -644,7 +653,7 @@ void BlackBox::estimateSHCoeff(const ceres::Solver::Options &_options)
 
 		ceres::ResidualBlockId residualBlockId = problem.AddResidualBlock(
 			dyn_cost_function,
-			NULL,
+			data_loss_function,
 			v_parameter_blocks);
 	}
 
@@ -667,6 +676,13 @@ void BlackBox::estimateAlbedo(const ceres::Solver::Options &_options)
 	Color black = { 0.0, 0.0, 0.0 };
 
 	ceres::Problem problem;
+
+	ceres::LossFunction *data_loss_function = NULL;
+	double huber_width = params.data_huber_width[1];
+	if (huber_width > 0.0)
+	{
+		data_loss_function = new ceres::HuberLoss(huber_width);
+	}
 
 	for (size_t i = 0; i < n_vertices; i++)
 	{
@@ -704,7 +720,7 @@ void BlackBox::estimateAlbedo(const ceres::Solver::Options &_options)
 
 		ceres::ResidualBlockId residualBlockId = problem.AddResidualBlock(
 			dyn_cost_function,
-			NULL,
+			data_loss_function,
 			v_parameter_blocks);
 	}
 
@@ -763,6 +779,13 @@ void BlackBox::estimateLocalLighting(const ceres::Solver::Options &_options)
 {
 	ceres::Problem problem;
 
+	ceres::LossFunction *data_loss_function = NULL;
+	double huber_width = params.data_huber_width[2];
+	if (huber_width > 0.0)
+	{
+		data_loss_function = new ceres::HuberLoss(huber_width);
+	}
+
 	for (size_t i = 0; i < n_vertices; i++)
 	{
 		ResidualPhotometricError *residual = new ResidualPhotometricError(
@@ -799,7 +822,7 @@ void BlackBox::estimateLocalLighting(const ceres::Solver::Options &_options)
 
 		ceres::ResidualBlockId residualBlockId = problem.AddResidualBlock(
 			dyn_cost_function,
-			NULL,
+			data_loss_function,
 			v_parameter_blocks);
 	}
 
@@ -875,11 +898,21 @@ void BlackBox::estimateShape(const ceres::Solver::Options &_options)
 
 	vector<Vertex> initial_vertices = vertices;
 
+	vector<double> vertex_disp(n_vertices, 0.0);
+
+	ceres::LossFunction *data_loss_function = NULL;
+	double huber_width = params.data_huber_width[3];
+	if (huber_width > 0.0)
+	{
+		data_loss_function = new ceres::HuberLoss(huber_width);
+	}
+
 	for (size_t i = 0; i < n_vertices; i++)
 	{
 		ResidualPhotometricError *residual = new ResidualPhotometricError(
 			&colors[i][0], 3, (unsigned int)adj_vertices[i].size(),
-			(unsigned int)adj_faces[i].size(), sh_order);
+			(unsigned int)adj_faces[i].size(), sh_order, 
+			params.use_normal_for_shape);
 
 		ceres::DynamicAutoDiffCostFunction<ResidualPhotometricError, 5>* dyn_cost_function
 			= new ceres::DynamicAutoDiffCostFunction< ResidualPhotometricError, 5 >(residual);
@@ -907,11 +940,36 @@ void BlackBox::estimateShape(const ceres::Solver::Options &_options)
 			v_parameter_blocks.push_back(&vertices[v_idx][0]);
 		}
 
+		if (params.use_normal_for_shape)
+		{
+			// Vertex normal
+			dyn_cost_function->AddParameterBlock(3);
+			v_parameter_blocks.push_back(&normals[i][0]);
+			// Adjacent vertices normal
+			for (size_t j = 0; j < adj_vertices[i].size(); j++)
+			{
+				int v_idx = adj_vertices[i][j];
+				dyn_cost_function->AddParameterBlock(3);
+				v_parameter_blocks.push_back(&normals[v_idx][0]);
+			}
+
+			// Vertex disp
+			dyn_cost_function->AddParameterBlock(1);
+			v_parameter_blocks.push_back(&vertex_disp[i]);
+			// Adjacent vertices disp
+			for (size_t j = 0; j < adj_vertices[i].size(); j++)
+			{
+				int v_idx = adj_vertices[i][j];
+				dyn_cost_function->AddParameterBlock(1);
+				v_parameter_blocks.push_back(&vertex_disp[v_idx]);
+			}
+		}
+
 		dyn_cost_function->SetNumResiduals(3);
 
 		ceres::ResidualBlockId residualBlockId = problem.AddResidualBlock(
 			dyn_cost_function,
-			NULL,
+			data_loss_function,
 			v_parameter_blocks);
 	}
 
@@ -924,13 +982,29 @@ void BlackBox::estimateShape(const ceres::Solver::Options &_options)
 			ResidualInitialVertexDiff *residual = 
 				new ResidualInitialVertexDiff(initial_vertices[i]);
 
-			ceres::AutoDiffCostFunction<ResidualInitialVertexDiff, 3, 3>* cost_function =
-				new ceres::AutoDiffCostFunction<ResidualInitialVertexDiff, 3, 3>(residual);
+			ceres::ResidualBlockId residualBlockId;
+			if (params.use_normal_for_shape)
+			{
+				ceres::AutoDiffCostFunction<ResidualInitialVertexDiff, 1, 3, 1>* cost_function =
+					new ceres::AutoDiffCostFunction<ResidualInitialVertexDiff, 1, 3, 1>(residual);
 
-			ceres::ResidualBlockId residualBlockId = problem.AddResidualBlock(
-				cost_function,
-				loss_function,
-				&vertices[i][0]);
+				residualBlockId = problem.AddResidualBlock(
+					cost_function,
+					loss_function,
+					&vertices[i][0],
+					&vertex_disp[i]
+					);
+			}
+			else
+			{
+				ceres::AutoDiffCostFunction<ResidualInitialVertexDiff, 3, 3>* cost_function =
+					new ceres::AutoDiffCostFunction<ResidualInitialVertexDiff, 3, 3>(residual);
+
+				residualBlockId = problem.AddResidualBlock(
+					cost_function,
+					loss_function,
+					&vertices[i][0]);
+			}
 		}
 	}
 
@@ -941,7 +1015,9 @@ void BlackBox::estimateShape(const ceres::Solver::Options &_options)
 		for (size_t i = 0; i < n_vertices; i++)
 		{
 			ResidualLaplacianSmoothing *residual 
-				= new ResidualLaplacianSmoothing((unsigned int)adj_vertices[i].size());
+				= new ResidualLaplacianSmoothing(
+				(unsigned int)adj_vertices[i].size(), 
+				params.use_normal_for_shape);
 
 			ceres::DynamicAutoDiffCostFunction<ResidualLaplacianSmoothing, 5>* dyn_cost_function
 				= new ceres::DynamicAutoDiffCostFunction< ResidualLaplacianSmoothing, 5 >(residual);
@@ -958,6 +1034,31 @@ void BlackBox::estimateShape(const ceres::Solver::Options &_options)
 				int v_idx = adj_vertices[i][j];
 				dyn_cost_function->AddParameterBlock(3);
 				v_parameter_blocks.push_back(&vertices[v_idx][0]);
+			}
+
+			if (params.use_normal_for_shape)
+			{
+				// Vertex normal
+				dyn_cost_function->AddParameterBlock(3);
+				v_parameter_blocks.push_back(&normals[i][0]);
+				// Adjacent vertices normal
+				for (size_t j = 0; j < adj_vertices[i].size(); j++)
+				{
+					int v_idx = adj_vertices[i][j];
+					dyn_cost_function->AddParameterBlock(3);
+					v_parameter_blocks.push_back(&normals[v_idx][0]);
+				}
+
+				// Vertex disp
+				dyn_cost_function->AddParameterBlock(1);
+				v_parameter_blocks.push_back(&vertex_disp[i]);
+				// Adjacent vertices disp
+				for (size_t j = 0; j < adj_vertices[i].size(); j++)
+				{
+					int v_idx = adj_vertices[i][j];
+					dyn_cost_function->AddParameterBlock(1);
+					v_parameter_blocks.push_back(&vertex_disp[v_idx]);
+				}
 			}
 
 			dyn_cost_function->SetNumResiduals(1);
@@ -982,14 +1083,33 @@ void BlackBox::estimateShape(const ceres::Solver::Options &_options)
 				ResidualTV *residual = new ResidualTV(
 					initial_vertices[i], initial_vertices[v_idx]);
 
-				ceres::AutoDiffCostFunction<ResidualTV, 3, 3, 3>* cost_function =
-					new ceres::AutoDiffCostFunction<ResidualTV, 3, 3, 3>(residual);
+				ceres::ResidualBlockId residualBlockId;
+				if (params.use_normal_for_shape)
+				{
+					ceres::AutoDiffCostFunction<ResidualTV, 3, 3, 3, 3, 3, 1, 1>* cost_function =
+						new ceres::AutoDiffCostFunction<ResidualTV, 3, 3, 3, 3, 3, 1, 1>(residual);
 
-				ceres::ResidualBlockId residualBlockId = problem.AddResidualBlock(
-					cost_function,
-					loss_function,
-					&vertices[i][0],
-					&vertices[v_idx][0]);
+					residualBlockId = problem.AddResidualBlock(
+						cost_function,
+						loss_function,
+						&vertices[i][0],
+						&vertices[v_idx][0],
+						&normals[i][0],
+						&normals[v_idx][0],
+						&vertex_disp[i],
+						&vertex_disp[v_idx]);
+				}
+				else
+				{
+					ceres::AutoDiffCostFunction<ResidualTV, 3, 3, 3>* cost_function =
+						new ceres::AutoDiffCostFunction<ResidualTV, 3, 3, 3>(residual);
+
+					residualBlockId = problem.AddResidualBlock(
+						cost_function,
+						loss_function,
+						&vertices[i][0],
+						&vertices[v_idx][0]);
+				}
 			}
 		}
 	}
@@ -999,6 +1119,12 @@ void BlackBox::estimateShape(const ceres::Solver::Options &_options)
 	{
 		problem.SetParameterBlockConstant(&albedos[i][0]);
 		problem.SetParameterBlockConstant(&local_lightings[i][0]);
+
+		if (params.use_normal_for_shape)
+		{
+			problem.SetParameterBlockConstant(&vertices[i][0]);
+			problem.SetParameterBlockConstant(&normals[i][0]);
+		}
 	}
 
 	ceres::Solver::Summary summary;
@@ -1006,5 +1132,17 @@ void BlackBox::estimateShape(const ceres::Solver::Options &_options)
 	ceres::Solve(_options, &problem, &summary);
 
 	cout << summary.FullReport() << endl;
+
+	updateVertices(vertex_disp);
+}
+//=============================================================================
+void BlackBox::updateVertices(vector<double> &_vertices_disp)
+{
+	for (size_t i = 0; i < _vertices_disp.size(); i++)
+	{
+		vertices[i][0] += _vertices_disp[i] * normals[i][0];
+		vertices[i][1] += _vertices_disp[i] * normals[i][1];
+		vertices[i][2] += _vertices_disp[i] * normals[i][2];
+	}
 }
 //=============================================================================

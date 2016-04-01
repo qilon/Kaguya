@@ -17,6 +17,8 @@
 #define LAPLACIAN_SMOOTH_WEIGHT			"laplacian_smooth_weight"
 #define TV_WEIGHT						"tv_weight"
 
+#define USE_NORMAL_FOR_SHAPE	"use_normal_for_shape"
+
 #define DATA_HUBER_WIDTH	"data_huber_width"
 
 // I/O parameters
@@ -188,7 +190,7 @@ using namespace std;
 				for (size_t i = 0; i < aux_vector.size(); ++i)
 				{
 					options[i].use_approximate_eigenvalue_bfgs_scaling 
-						= aux_vector[i];
+						= aux_vector[i] != 0;
 				}
 			}
 
@@ -317,7 +319,7 @@ using namespace std;
 				node[USE_NONMONOTONIC_STEPS] >> aux_vector;
 				for (size_t i = 0; i < aux_vector.size(); ++i)
 				{
-					options[i].use_nonmonotonic_steps = aux_vector[i];
+					options[i].use_nonmonotonic_steps = aux_vector[i] != 0;
 				}
 			}
 
@@ -534,7 +536,7 @@ using namespace std;
 				node[USE_EXPLICIT_SCHUR_COMPLEMENT] >> aux_vector;
 				for (size_t i = 0; i < aux_vector.size(); ++i)
 				{
-					options[i].use_explicit_schur_complement = aux_vector[i];
+					options[i].use_explicit_schur_complement = aux_vector[i] != 0;
 				}
 			}
 
@@ -544,7 +546,7 @@ using namespace std;
 				node[USE_POSTORDERING] >> aux_vector;
 				for (size_t i = 0; i < aux_vector.size(); ++i)
 				{
-					options[i].use_postordering = aux_vector[i];
+					options[i].use_postordering = aux_vector[i] != 0;
 				}
 			}
 
@@ -554,7 +556,7 @@ using namespace std;
 				node[DYNAMIC_SPARSITY] >> aux_vector;
 				for (size_t i = 0; i < aux_vector.size(); ++i)
 				{
-					options[i].dynamic_sparsity = aux_vector[i];
+					options[i].dynamic_sparsity = aux_vector[i] != 0;
 				}
 			}
 
@@ -594,7 +596,7 @@ using namespace std;
 				node[JACOBI_SCALING] >> aux_vector;
 				for (size_t i = 0; i < aux_vector.size(); ++i)
 				{
-					options[i].jacobi_scaling = aux_vector[i];
+					options[i].jacobi_scaling = aux_vector[i] != 0;
 				}
 			}
 
@@ -604,7 +606,7 @@ using namespace std;
 				node[USE_INNER_ITERATIONS] >> aux_vector;
 				for (size_t i = 0; i < aux_vector.size(); ++i)
 				{
-					options[i].use_inner_iterations = aux_vector[i];
+					options[i].use_inner_iterations = aux_vector[i] != 0;
 				}
 			}
 
@@ -635,7 +637,7 @@ using namespace std;
 				node[MINIMIZER_PROGRESS_TO_STDOUT] >> aux_vector;
 				for (size_t i = 0; i < aux_vector.size(); ++i)
 				{
-					options[i].minimizer_progress_to_stdout = aux_vector[i];
+					options[i].minimizer_progress_to_stdout = aux_vector[i] != 0;
 				}
 			}
 
@@ -667,7 +669,7 @@ using namespace std;
 				node[CHECK_GRADIENTS] >> aux_vector;
 				for (size_t i = 0; i < aux_vector.size(); ++i)
 				{
-					options[i].check_gradients = aux_vector[i];
+					options[i].check_gradients = aux_vector[i] != 0;
 				}
 			}
 
@@ -699,7 +701,7 @@ using namespace std;
 				node[UPDATE_STATE_EVERY_ITERATION] >> aux_vector;
 				for (size_t i = 0; i < aux_vector.size(); ++i)
 				{
-					options[i].update_state_every_iteration = aux_vector[i];
+					options[i].update_state_every_iteration = aux_vector[i] != 0;
 				}
 			}
 		}
@@ -726,6 +728,8 @@ using namespace std;
 			displacement_weight = 4e-3;
 			laplacian_smooth_weight = 7.5e-3;
 			tv_weight = 7.5e-3;
+
+			use_normal_for_shape = false;
 
 			data_huber_width.resize(NUM_OPTIMIZATIONS, 0);
 			
@@ -773,6 +777,8 @@ using namespace std;
 		double displacement_weight;
 		double laplacian_smooth_weight;
 		double tv_weight;
+
+		bool use_normal_for_shape;
 
 		vector<double> data_huber_width;
 
@@ -865,6 +871,11 @@ using namespace std;
 			if (!fs[TV_WEIGHT].empty())
 			{
 				fs[TV_WEIGHT] >> tv_weight;
+			}
+
+			if (!fs[USE_NORMAL_FOR_SHAPE].empty())
+			{
+				fs[USE_NORMAL_FOR_SHAPE] >> use_normal_for_shape;
 			}
 
 			if (!fs[DATA_HUBER_WIDTH].empty())
