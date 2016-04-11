@@ -13,6 +13,8 @@ using namespace OpenMesh;
 class BlackBox
 {
 private:
+	static const string DEFAULT_PARAMS_FILENAME;
+
 	static Parameters params;
 
 	static MyMesh mesh;
@@ -35,6 +37,7 @@ private:
 	static vector<Intensity> sh_coeff;
 	static vector<Color> albedos;
 	static vector<Color> local_lightings;
+	static vector<Intensity> shadings;
 	static vector< vector<Intensity> > diff_weights;
 
 	static OpenMesh::IO::Options mesh_read_opt;
@@ -57,13 +60,16 @@ private:
 	static void estimateSHCoeff(const ceres::Solver::Options &_options);
 	static void estimateAlbedo(const ceres::Solver::Options &_options);
 	static void estimateLocalLighting(const ceres::Solver::Options &_options);
+	static void estimateAlbedoLocalLighting(const ceres::Solver::Options &_options);
 	static void estimateShape(const ceres::Solver::Options &_options);
 
 	static void computeShading(const MyMesh &_mesh, 
 		const vector<Intensity> &_sh_coeff, const unsigned int &_sh_order,
 		vector<Intensity> &_shading);
-	static Intensity computeShading(const Normal &_normal, 
+	static Intensity computeShading(const Normal &_normal,
 		const vector<Intensity> &_sh_coeff, const unsigned int &_sh_order);
+	static void computeEstDiffuse(const vector<Color> &_albedos,
+		const vector<Intensity> &_shadings, vector<Color> &_est_diffuse);
 	static void computeEstIntensity(const vector<Color> &_albedos,
 		const vector<Intensity> &_shadings, const vector<Color> &_local_lightings,
 		vector<Color> &_est_intensities);
@@ -73,6 +79,9 @@ private:
 	static void setMeshColors(const vector<Intensity> &_intensities, MyMesh &_mesh);
 
 	static void updateVertices(vector<double> &_vertices_disp);
+
+	static void updateShadings();
+	static void updateAlbedos();
 
 public:
 	static void initialize(int *argc, char **argv);

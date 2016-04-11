@@ -6,7 +6,7 @@
 #define ALBEDO_PERCENTILE		"albedo_percentile"
 #define COLOR_DIFF_THRESHOLD	"color_diff_threshold"
 #define COLOR_DIFF_VAR			"color_diff_var"
-#define NORMAL_DIFF_VAR			"normal_diff_var"
+#define DEPTH_DIFF_VAR			"depth_diff_var"
 
 #define USE_DEPTH_WEIGHT		"use_depth_weight"
 
@@ -17,7 +17,18 @@
 #define LAPLACIAN_SMOOTH_WEIGHT			"laplacian_smooth_weight"
 #define TV_WEIGHT						"tv_weight"
 
+#define SMOOTH_ALBEDO_HUBER_WIDTH			"smooth_albedo_huber_width"
+#define SMOOTH_LOCAL_LIGHTING_HUBER_WIDTH	"smooth_local_lighting_huber_width"
+#define LOCAL_LIGHTING_MAGNITUDE_HUBER_WIDTH "local_lighting_magnitude_huber_width"
+
+#define COMBINE_ALBEDO_LIGHTING "combine_albedo_lighting"
 #define USE_NORMAL_FOR_SHAPE	"use_normal_for_shape"
+#define USE_LOWER_BOUND_ALBEDO	"use_lower_bound_albedo"
+#define USE_UPPER_BOUND_ALBEDO	"use_upper_bound_albedo"
+#define USE_LOWER_BOUND_SHADING	"use_lower_bound_shading"
+#define USE_UPPER_BOUND_SHADING	"use_upper_bound_shading"
+#define USE_LOWER_BOUND_LIGHTING	"use_lower_bound_lighting"
+#define USE_UPPER_BOUND_LIGHTING	"use_upper_bound_lighting"
 
 #define DATA_HUBER_WIDTH	"data_huber_width"
 
@@ -28,6 +39,7 @@
 #define OUTPUT_ALBEDO_MESH_FILENAME			"output_albedo_mesh_filename"
 #define OUTPUT_SHADING_MESH_FILENAME		"output_shading_mesh_filename"
 #define OUTPUT_LOCAL_LIGHTING_MESH_FILENAME	"output_local_lighting_mesh_filename"
+#define OUTPUT_EST_DIFFUSE_MESH_FILENAME	"output_est_diffuse_mesh_filename"
 #define OUTPUT_EST_INTENSITY_MESH_FILENAME	"output_est_intensity_mesh_filename"
 #define OUTPUT_ORIG_INTENSITY_MESH_FILENAME	"output_orig_intensity_mesh_filename"
 
@@ -35,6 +47,7 @@
 #define SAVE_ALBEDO			"save_albedo"
 #define SAVE_SHADING		"save_shading"
 #define SAVE_LOCAL_LIGHTING	"save_local_lighting"
+#define SAVE_EST_DIFFUSE	"save_est_diffuse"
 #define SAVE_EST_INTENSITY	"save_est_intensity"
 #define SAVE_ORIG_INTENSITY	"save_orig_intensity"
 #define SAVE_MESH_BINARY	"save_mesh_binary"
@@ -47,6 +60,11 @@
 #define MAX_GRAY						"max_gray"
 #define MAX_SHADING			"max_shading"
 #define USE_MASK_VALUES		"use_mask_values"
+
+#define ALBEDO_INITIALIZATION	"albedo_initialization"
+#define WHITE_ALBEDO	0
+#define COLOR_ALBEDO	1
+#define EST_ALBEDO		2
 
 // Ceres options root
 #define CERES_SOLVER "ceres_solver"
@@ -718,7 +736,7 @@ using namespace std;
 			albedo_percentile = 0.98;
 			color_diff_threshold = 0.5;
 			color_diff_var = 0.05;
-			normal_diff_var = 50;
+			depth_diff_var = 50;
 
 			use_depth_weight = true;
 
@@ -729,9 +747,23 @@ using namespace std;
 			laplacian_smooth_weight = 7.5e-3;
 			tv_weight = 7.5e-3;
 
+			combine_albedo_lighting = false;
+
 			use_normal_for_shape = false;
+			use_lower_bound_albedo = false;
+			use_upper_bound_albedo = false;
+			use_lower_bound_shading = false;
+			use_upper_bound_shading = false;
+			use_lower_bound_lighting = false;
+			use_upper_bound_lighting = false;
 
 			data_huber_width.resize(NUM_OPTIMIZATIONS, 0);
+
+			smooth_albedo_huber_width = 0;
+			smooth_local_lighting_huber_width = 0;
+			local_lighting_magnitude_huber_width = 0;
+
+			albedo_initialization = WHITE_ALBEDO;
 			
 			input_mesh_filename = "C:/Users/Qi/Desktop/generated/mesh_0180_albedo_0001.ply";
 
@@ -739,6 +771,7 @@ using namespace std;
 			output_albedo_mesh_filename = "C:/Users/Qi/Desktop/generated/mesh_0180_albedo.ply";
 			output_shading_mesh_filename = "C:/Users/Qi/Desktop/generated/mesh_0180_shading.ply";
 			output_local_lighting_mesh_filename = "C:/Users/Qi/Desktop/generated/mesh_0180_shading.ply";
+			output_est_diffuse_mesh_filename = "C:/Users/Qi/Desktop/generated/mesh_0180_diffuse.ply";
 			output_est_intensity_mesh_filename = "C:/Users/Qi/Desktop/generated/mesh_0180_intensity.ply";
 			output_orig_intensity_mesh_filename = "C:/Users/Qi/Desktop/generated/mesh_0180_intensity.ply";
 
@@ -746,6 +779,7 @@ using namespace std;
 			save_albedo = true;
 			save_shading = true;
 			save_local_lighting = true;
+			save_est_diffuse = true;
 			save_est_intensity = true;
 			save_orig_intensity = true;
 			save_mesh_binary = true;
@@ -767,7 +801,7 @@ using namespace std;
 		double albedo_percentile;
 		double color_diff_threshold;
 		double color_diff_var;
-		double normal_diff_var;
+		double depth_diff_var;
 
 		bool use_depth_weight;
 
@@ -778,9 +812,23 @@ using namespace std;
 		double laplacian_smooth_weight;
 		double tv_weight;
 
+		bool combine_albedo_lighting;
+
 		bool use_normal_for_shape;
+		bool use_lower_bound_albedo;
+		bool use_upper_bound_albedo;
+		bool use_lower_bound_shading;
+		bool use_upper_bound_shading;
+		bool use_lower_bound_lighting;
+		bool use_upper_bound_lighting;
 
 		vector<double> data_huber_width;
+		
+		double smooth_albedo_huber_width;
+		double smooth_local_lighting_huber_width;
+		double local_lighting_magnitude_huber_width;
+
+		int albedo_initialization;
 
 		string input_mesh_filename;
 
@@ -788,6 +836,7 @@ using namespace std;
 		string output_albedo_mesh_filename;
 		string output_shading_mesh_filename;
 		string output_local_lighting_mesh_filename;
+		string output_est_diffuse_mesh_filename;
 		string output_est_intensity_mesh_filename;
 		string output_orig_intensity_mesh_filename;
 		
@@ -795,17 +844,12 @@ using namespace std;
 		bool save_albedo;
 		bool save_shading;
 		bool save_local_lighting;
+		bool save_est_diffuse;
 		bool save_est_intensity;
 		bool save_orig_intensity;
 		bool save_mesh_binary;
 
 		SolverOptions ceres_solver;
-
-		int mode;
-		float min_gray, max_gray;
-		float max_shading;
-		string input_sh_coeff_filename;
-		bool use_mask_values;
 
 		// Load parameters from an ini file
 		inline void Parameters::load(const std::string &_filename)
@@ -833,9 +877,9 @@ using namespace std;
 				fs[COLOR_DIFF_VAR] >> color_diff_var;
 			}
 
-			if (!fs[NORMAL_DIFF_VAR].empty())
+			if (!fs[DEPTH_DIFF_VAR].empty())
 			{
-				fs[NORMAL_DIFF_VAR] >> normal_diff_var;
+				fs[DEPTH_DIFF_VAR] >> depth_diff_var;
 			}
 
 			if (!fs[USE_DEPTH_WEIGHT].empty())
@@ -873,14 +917,69 @@ using namespace std;
 				fs[TV_WEIGHT] >> tv_weight;
 			}
 
+			if (!fs[COMBINE_ALBEDO_LIGHTING].empty())
+			{
+				fs[COMBINE_ALBEDO_LIGHTING] >> combine_albedo_lighting;
+			}
+
 			if (!fs[USE_NORMAL_FOR_SHAPE].empty())
 			{
 				fs[USE_NORMAL_FOR_SHAPE] >> use_normal_for_shape;
 			}
 
+			if (!fs[USE_LOWER_BOUND_ALBEDO].empty())
+			{
+				fs[USE_LOWER_BOUND_ALBEDO] >> use_lower_bound_albedo;
+			}
+
+			if (!fs[USE_UPPER_BOUND_ALBEDO].empty())
+			{
+				fs[USE_UPPER_BOUND_ALBEDO] >> use_upper_bound_albedo;
+			}
+
+			if (!fs[USE_LOWER_BOUND_SHADING].empty())
+			{
+				fs[USE_LOWER_BOUND_SHADING] >> use_lower_bound_shading;
+			}
+
+			if (!fs[USE_UPPER_BOUND_SHADING].empty())
+			{
+				fs[USE_UPPER_BOUND_SHADING] >> use_upper_bound_shading;
+			}
+
+			if (!fs[USE_LOWER_BOUND_LIGHTING].empty())
+			{
+				fs[USE_LOWER_BOUND_LIGHTING] >> use_lower_bound_lighting;
+			}
+
+			if (!fs[USE_UPPER_BOUND_LIGHTING].empty())
+			{
+				fs[USE_UPPER_BOUND_LIGHTING] >> use_upper_bound_lighting;
+			}
+
 			if (!fs[DATA_HUBER_WIDTH].empty())
 			{
 				fs[DATA_HUBER_WIDTH] >> data_huber_width;
+			}
+
+			if (!fs[SMOOTH_ALBEDO_HUBER_WIDTH].empty())
+			{
+				fs[SMOOTH_ALBEDO_HUBER_WIDTH] >> smooth_albedo_huber_width;
+			}
+
+			if (!fs[SMOOTH_LOCAL_LIGHTING_HUBER_WIDTH].empty())
+			{
+				fs[SMOOTH_LOCAL_LIGHTING_HUBER_WIDTH] >> smooth_local_lighting_huber_width;
+			}
+
+			if (!fs[LOCAL_LIGHTING_MAGNITUDE_HUBER_WIDTH].empty())
+			{
+				fs[LOCAL_LIGHTING_MAGNITUDE_HUBER_WIDTH] >> local_lighting_magnitude_huber_width;
+			}
+
+			if (!fs[ALBEDO_INITIALIZATION].empty())
+			{
+				fs[ALBEDO_INITIALIZATION] >> albedo_initialization;
 			}
 
 			if (!fs[INPUT_MESH_FILENAME].empty())
@@ -906,6 +1005,11 @@ using namespace std;
 			if (!fs[OUTPUT_LOCAL_LIGHTING_MESH_FILENAME].empty())
 			{
 				fs[OUTPUT_LOCAL_LIGHTING_MESH_FILENAME] >> output_local_lighting_mesh_filename;
+			}
+
+			if (!fs[OUTPUT_EST_DIFFUSE_MESH_FILENAME].empty())
+			{
+				fs[OUTPUT_EST_DIFFUSE_MESH_FILENAME] >> output_est_diffuse_mesh_filename;
 			}
 
 			if (!fs[OUTPUT_EST_INTENSITY_MESH_FILENAME].empty())
@@ -936,6 +1040,11 @@ using namespace std;
 			if (!fs[SAVE_LOCAL_LIGHTING].empty())
 			{
 				fs[SAVE_LOCAL_LIGHTING] >> save_local_lighting;
+			}
+
+			if (!fs[SAVE_EST_DIFFUSE].empty())
+			{
+				fs[SAVE_EST_DIFFUSE] >> save_est_diffuse;
 			}
 
 			if (!fs[SAVE_EST_INTENSITY].empty())

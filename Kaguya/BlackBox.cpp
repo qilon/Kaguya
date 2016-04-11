@@ -1,5 +1,8 @@
 #include "BlackBox.h"
 //=============================================================================
+const string BlackBox::DEFAULT_PARAMS_FILENAME =
+	"C:/Users/Qi/Documents/GitHub/config/Kaguya/KaguyaConfig.yml";
+
 Parameters BlackBox::params;
 
 MyMesh BlackBox::mesh;
@@ -22,6 +25,7 @@ unsigned int BlackBox::n_sh_basis;
 vector<Intensity> BlackBox::sh_coeff;
 vector<Color> BlackBox::albedos;
 vector<Color> BlackBox::local_lightings;
+vector<Intensity> BlackBox::shadings;
 vector< vector<Intensity> > BlackBox::diff_weights;
 
 OpenMesh::IO::Options BlackBox::mesh_read_opt;
@@ -29,7 +33,18 @@ OpenMesh::IO::Options BlackBox::mesh_write_opt;
 //=============================================================================
 void BlackBox::initialize(int *argc, char **argv)
 {
-	params.load(argv[1]);
+	string params_filename;
+
+	if (argc[0] > 1)
+	{
+		params_filename = argv[1];
+	}
+	else
+	{
+		params_filename = DEFAULT_PARAMS_FILENAME;
+	}
+
+	params.load(params_filename);
 
 	mesh.request_vertex_colors();
 	mesh.request_face_normals();
@@ -67,12 +82,25 @@ void BlackBox::run()
 	sh_coeff.resize(n_sh_basis, 0);
 	albedos.resize(n_vertices, white);
 	local_lightings.resize(n_vertices, black);
+	shadings.resize(n_vertices, 0);
 
 	initDiffWeights();
 
 	estimateSHCoeff(params.ceres_solver.options[0]);
-	estimateAlbedo(params.ceres_solver.options[1]);
-	estimateLocalLighting(params.ceres_solver.options[2]);
+
+	updateShadings();
+	updateAlbedos();
+
+	if (params.combine_albedo_lighting)
+	{
+		estimateAlbedoLocalLighting(params.ceres_solver.options[1]);
+	}
+	else
+	{
+		estimateAlbedo(params.ceres_solver.options[1]);
+		estimateLocalLighting(params.ceres_solver.options[2]);
+	}
+
 	estimateShape(params.ceres_solver.options[3]);
 }
 //=============================================================================
@@ -125,6 +153,19 @@ void BlackBox::save()
 		cout << "Writing mesh: " << params.output_shading_mesh_filename << endl;
 
 		writeMesh(mesh, params.output_shading_mesh_filename, mesh_write_opt);
+	}
+
+	if (params.save_est_diffuse)
+	{
+		vector<Color> est_diffuse;
+		computeEstDiffuse(albedos, shadings, est_diffuse);
+
+		setMeshColors(est_diffuse, mesh);
+
+		cout << "Writing mesh: " << params.output_est_diffuse_mesh_filename
+			<< endl;
+
+		writeMesh(mesh, params.output_est_diffuse_mesh_filename, mesh_write_opt);
 	}
 
 	if (params.save_est_intensity)
@@ -198,8 +239,8 @@ void BlackBox::initFromMesh(MyMesh& _mesh)
 		MyMesh::ConstVertexVertexIter vv_end = _mesh.vv_end(*v_it);
 		for (vv_it = _mesh.vv_begin(*v_it); vv_it != vv_end; ++vv_it)
 		{
-			VertexIndex v_idx = vv_it->idx();
-			v_idxs.push_back(v_idx);
+			VertexIndex vv_idx = vv_it->idx();
+			v_idxs.push_back(vv_idx);
 		}
 		adj_vertices[v_idx] = std::move(v_idxs);
 
@@ -329,6 +370,21 @@ Intensity BlackBox::computeShading(const Normal &_normal,
 	}
 
 	return shading;
+}
+//=============================================================================
+void BlackBox::computeEstDiffuse(const vector<Color> &_albedos,
+	const vector<Intensity> &_shadings, vector<Color> &_est_diffuse)
+{
+	_est_diffuse.reserve(_albedos.size());
+	for (size_t i = 0; i < _albedos.size(); i++)
+	{
+		Color est_intensity(3);
+		for (size_t j = 0; j < 3; j++)
+		{
+			est_intensity[j] = _albedos[i][j] * _shadings[i];
+		}
+		_est_diffuse.push_back(est_intensity);
+	}
 }
 //=============================================================================
 void BlackBox::computeEstIntensity(const vector<Color> &_albedos,
@@ -556,7 +612,7 @@ void BlackBox::initDiffWeights()
 			Intensity weight = computeDiffWeight(colors[i], colors[adj_v_idx],
 				normals[i], normals[adj_v_idx], vertices[i], vertices[adj_v_idx],
 				params.color_diff_threshold, params.color_diff_var, 
-				params.normal_diff_var);
+				params.depth_diff_var);
 			weights.push_back(weight);
 		}
 		diff_weights[i] = std::move(weights);
@@ -566,30 +622,37 @@ void BlackBox::initDiffWeights()
 Intensity BlackBox::computeDiffWeight(Color &_color1, Color &_color2,
 	Normal &_normal1, Normal &_normal2, Vertex &_vertex1, Vertex &_vertex2, 
 	Intensity _color_diff_threshold, Intensity _color_diff_var, 
-	Coordinate _normal_diff_var)
+	Coordinate _depth_diff_var)
 {
-	Intensity weight = 0.0;
+	Intensity weight = 1.0;
 
-	Color color_diff = { _color1[0] - _color2[0],
-		_color1[1] - _color2[1], _color1[2] - _color2[2] };
-	Intensity color_diff_norm2 = pow(color_diff[0], 2) + pow(color_diff[1], 2)
-		+ pow(color_diff[2], 2);
-
-	if (color_diff_norm2 <= _color_diff_threshold)
+	if (_color_diff_threshold > 0)
 	{
-		weight = exp(color_diff_norm2 / (2 * _color_diff_var));
+		Color color_diff = { _color1[0] - _color2[0],
+			_color1[1] - _color2[1], _color1[2] - _color2[2] };
+		Intensity color_diff_norm2 = pow(color_diff[0], 2) + pow(color_diff[1], 2)
+			+ pow(color_diff[2], 2);
 
-		if (params.use_depth_weight)
+		if (color_diff_norm2 <= _color_diff_threshold)
 		{
-			Coordinate depth_diff = _vertex1[2] - _vertex2[2];
-			weight *= exp(pow(depth_diff, 2) / (2 * _normal_diff_var));
+			weight = exp(color_diff_norm2 / (2 * _color_diff_var));
 		}
 		else
 		{
-			Coordinate normal_diff_cos = _normal1[0] * _normal2[0]
-				+ _normal1[1] * _normal2[1] + _normal1[2] * _normal2[2];
-			weight *= exp((1 - normal_diff_cos) / (2 * _normal_diff_var));
+			weight = 0;
 		}
+	}
+
+	if (params.use_depth_weight)
+	{
+		Coordinate depth_diff = _vertex1[2] - _vertex2[2];
+		weight *= exp(pow(depth_diff, 2) / (2 * _depth_diff_var));
+	}
+	else
+	{
+		Coordinate normal_diff_cos = _normal1[0] * _normal2[0]
+			+ _normal1[1] * _normal2[1] + _normal1[2] * _normal2[2];
+		weight *= exp((1 - normal_diff_cos) / (2 * _depth_diff_var));
 	}
 
 	return weight;
@@ -621,7 +684,9 @@ void BlackBox::estimateSHCoeff(const ceres::Solver::Options &_options)
 	{
 		ResidualPhotometricError *residual = new ResidualPhotometricError(
 			&grays[i], 1, (unsigned int)adj_vertices[i].size(),
-			(unsigned int)adj_faces[i].size(), sh_order);
+			(unsigned int)adj_faces[i].size(), sh_order, false,
+			params.use_lower_bound_shading,
+			params.use_upper_bound_shading);
 
 		ceres::DynamicAutoDiffCostFunction<ResidualPhotometricError, 5>* dyn_cost_function
 			= new ceres::DynamicAutoDiffCostFunction< ResidualPhotometricError, 5 >(residual);
@@ -726,8 +791,18 @@ void BlackBox::estimateAlbedo(const ceres::Solver::Options &_options)
 
 	if (params.smooth_albedo_weight > 0.0)
 	{
+		ceres::LossFunction* huber_loss = NULL;
+
+		if (params.smooth_albedo_huber_width > 0)
+		{
+			huber_loss = new ceres::HuberLoss(params.smooth_albedo_huber_width);
+		}
+
 		ceres::ScaledLoss* loss_function = new ceres::ScaledLoss(
-			NULL, params.smooth_albedo_weight, ceres::TAKE_OWNERSHIP);
+			huber_loss, 
+			params.smooth_albedo_weight, 
+			ceres::TAKE_OWNERSHIP);
+
 		for (size_t i = 0; i < n_vertices; i++)
 		{
 			for (size_t j = 0; j < adj_vertices[i].size(); j++)
@@ -760,12 +835,19 @@ void BlackBox::estimateAlbedo(const ceres::Solver::Options &_options)
 	{
 		problem.SetParameterBlockConstant(&vertices[i][0]);
 
-		problem.SetParameterLowerBound(&albedos[i][0], 0, 0.0);
-		problem.SetParameterLowerBound(&albedos[i][0], 1, 0.0);
-		problem.SetParameterLowerBound(&albedos[i][0], 2, 0.0);
-		problem.SetParameterUpperBound(&albedos[i][0], 0, 1.0);
-		problem.SetParameterUpperBound(&albedos[i][0], 1, 1.0);
-		problem.SetParameterUpperBound(&albedos[i][0], 2, 1.0);
+		if (params.use_lower_bound_albedo)
+		{
+			problem.SetParameterLowerBound(&albedos[i][0], 0, 0.0);
+			problem.SetParameterLowerBound(&albedos[i][0], 1, 0.0);
+			problem.SetParameterLowerBound(&albedos[i][0], 2, 0.0);
+		}
+		
+		if (params.use_upper_bound_albedo)
+		{
+			problem.SetParameterUpperBound(&albedos[i][0], 0, 1.0);
+			problem.SetParameterUpperBound(&albedos[i][0], 1, 1.0);
+			problem.SetParameterUpperBound(&albedos[i][0], 2, 1.0);
+		}
 	}
 
 	ceres::Solver::Summary summary;
@@ -828,6 +910,149 @@ void BlackBox::estimateLocalLighting(const ceres::Solver::Options &_options)
 
 	if (params.smooth_local_lighting_weight > 0.0)
 	{
+		ceres::LossFunction* huber_loss = NULL;
+
+		if (params.smooth_local_lighting_huber_width > 0)
+		{
+			huber_loss = new ceres::HuberLoss(params.smooth_local_lighting_huber_width);
+		}
+
+		ceres::ScaledLoss* loss_function = new ceres::ScaledLoss(
+			huber_loss, 
+			params.smooth_local_lighting_weight, 
+			ceres::TAKE_OWNERSHIP);
+
+		for (size_t i = 0; i < n_vertices; i++)
+		{
+			for (size_t j = 0; j < adj_vertices[i].size(); j++)
+			{
+				unsigned int adj_v_idx = adj_vertices[i][j];
+
+				Intensity weight = diff_weights[i][j];
+
+				if (weight > 0.0)
+				{
+					ResidualWeightedDifference *residual = new ResidualWeightedDifference(
+						weight, 3);
+
+					ceres::AutoDiffCostFunction<ResidualWeightedDifference, 3, 3, 3>* cost_function =
+						new ceres::AutoDiffCostFunction<ResidualWeightedDifference, 3, 3, 3>(residual);
+
+					ceres::ResidualBlockId residualBlockId = problem.AddResidualBlock(
+						cost_function,
+						loss_function,
+						&local_lightings[i][0],
+						&local_lightings[adj_v_idx][0]);
+				}
+			}
+		}
+	}
+
+	if (params.local_lighting_magnitude_weight > 0.0)
+	{
+		ceres::LossFunction* huber_loss = NULL;
+
+		if (params.local_lighting_magnitude_huber_width > 0)
+		{
+			huber_loss = new ceres::HuberLoss(params.local_lighting_magnitude_huber_width);
+		}
+
+		ceres::ScaledLoss* loss_function = new ceres::ScaledLoss(
+			huber_loss,
+			params.local_lighting_magnitude_weight, 
+			ceres::TAKE_OWNERSHIP);
+
+		for (size_t i = 0; i < n_vertices; i++)
+		{
+			ResidualValueMagnitude *residual = new ResidualValueMagnitude(3);
+
+			ceres::AutoDiffCostFunction<ResidualValueMagnitude, 3, 3>* cost_function =
+				new ceres::AutoDiffCostFunction<ResidualValueMagnitude, 3, 3>(residual);
+
+			ceres::ResidualBlockId residualBlockId = problem.AddResidualBlock(
+				cost_function,
+				loss_function,
+				&local_lightings[i][0]);
+		}
+	}
+
+	problem.SetParameterBlockConstant(&sh_coeff[0]);
+	for (size_t i = 0; i < n_vertices; ++i)
+	{
+		problem.SetParameterBlockConstant(&vertices[i][0]);
+		problem.SetParameterBlockConstant(&albedos[i][0]);
+
+		problem.SetParameterLowerBound(&local_lightings[i][0], 0, 0.0);
+		problem.SetParameterLowerBound(&local_lightings[i][0], 1, 0.0);
+		problem.SetParameterLowerBound(&local_lightings[i][0], 2, 0.0);
+	}
+
+	ceres::Solver::Summary summary;
+
+	ceres::Solve(_options, &problem, &summary);
+
+	cout << summary.FullReport() << endl;
+}
+//=============================================================================
+void BlackBox::estimateAlbedoLocalLighting(const ceres::Solver::Options &_options)
+{
+	ceres::Problem problem;
+
+	ceres::LossFunction *data_loss_function = NULL;
+	double huber_width = params.data_huber_width[2];
+	if (huber_width > 0.0)
+	{
+		data_loss_function = new ceres::HuberLoss(huber_width);
+	}
+
+	for (size_t i = 0; i < n_vertices; i++)
+	{
+		ResidualPhotometricErrorAlbedoLightingVariation *residual = 
+			new ResidualPhotometricErrorAlbedoLightingVariation(
+			&colors[i][0], 3, shadings[i]);
+
+		ceres::AutoDiffCostFunction<ResidualPhotometricErrorAlbedoLightingVariation, 3, 3, 3>* cost_function =
+			new ceres::AutoDiffCostFunction<ResidualPhotometricErrorAlbedoLightingVariation, 3, 3, 3>(residual);
+
+		ceres::ResidualBlockId residualBlockId = problem.AddResidualBlock(
+			cost_function,
+			data_loss_function,
+			&albedos[i][0],
+			&local_lightings[i][0]);
+	}
+
+	if (params.smooth_albedo_weight > 0.0)
+	{
+		ceres::ScaledLoss* loss_function = new ceres::ScaledLoss(
+			NULL, params.smooth_albedo_weight, ceres::TAKE_OWNERSHIP);
+		for (size_t i = 0; i < n_vertices; i++)
+		{
+			for (size_t j = 0; j < adj_vertices[i].size(); j++)
+			{
+				unsigned int adj_v_idx = adj_vertices[i][j];
+
+				Intensity weight = diff_weights[i][j];
+
+				if (weight > 0.0)
+				{
+					ResidualWeightedDifference *residual = new ResidualWeightedDifference(
+						weight, 3);
+
+					ceres::AutoDiffCostFunction<ResidualWeightedDifference, 3, 3, 3>* cost_function =
+						new ceres::AutoDiffCostFunction<ResidualWeightedDifference, 3, 3, 3>(residual);
+
+					ceres::ResidualBlockId residualBlockId = problem.AddResidualBlock(
+						cost_function,
+						loss_function,
+						&albedos[i][0],
+						&albedos[adj_v_idx][0]);
+				}
+			}
+		}
+	}
+
+	if (params.smooth_local_lighting_weight > 0.0)
+	{
 		ceres::ScaledLoss* loss_function = new ceres::ScaledLoss(
 			NULL, params.smooth_local_lighting_weight, ceres::TAKE_OWNERSHIP);
 		for (size_t i = 0; i < n_vertices; i++)
@@ -874,15 +1099,35 @@ void BlackBox::estimateLocalLighting(const ceres::Solver::Options &_options)
 		}
 	}
 
-	problem.SetParameterBlockConstant(&sh_coeff[0]);
 	for (size_t i = 0; i < n_vertices; ++i)
 	{
-		problem.SetParameterBlockConstant(&vertices[i][0]);
-		problem.SetParameterBlockConstant(&albedos[i][0]);
+		if (params.use_lower_bound_albedo)
+		{
+			problem.SetParameterLowerBound(&albedos[i][0], 0, 0.0);
+			problem.SetParameterLowerBound(&albedos[i][0], 1, 0.0);
+			problem.SetParameterLowerBound(&albedos[i][0], 2, 0.0);
+		}
 
-		problem.SetParameterLowerBound(&local_lightings[i][0], 0, 0.0);
-		problem.SetParameterLowerBound(&local_lightings[i][0], 1, 0.0);
-		problem.SetParameterLowerBound(&local_lightings[i][0], 2, 0.0);
+		if (params.use_upper_bound_albedo)
+		{
+			problem.SetParameterUpperBound(&albedos[i][0], 0, 1.0);
+			problem.SetParameterUpperBound(&albedos[i][0], 1, 1.0);
+			problem.SetParameterUpperBound(&albedos[i][0], 2, 1.0);
+		}
+
+		if (params.use_lower_bound_lighting)
+		{
+			problem.SetParameterLowerBound(&local_lightings[i][0], 0, 0.0);
+			problem.SetParameterLowerBound(&local_lightings[i][0], 1, 0.0);
+			problem.SetParameterLowerBound(&local_lightings[i][0], 2, 0.0);
+		}
+
+		if (params.use_upper_bound_lighting)
+		{
+			problem.SetParameterUpperBound(&local_lightings[i][0], 0, 1.0);
+			problem.SetParameterUpperBound(&local_lightings[i][0], 1, 1.0);
+			problem.SetParameterUpperBound(&local_lightings[i][0], 2, 1.0);
+		}
 	}
 
 	ceres::Solver::Summary summary;
@@ -912,7 +1157,8 @@ void BlackBox::estimateShape(const ceres::Solver::Options &_options)
 		ResidualPhotometricError *residual = new ResidualPhotometricError(
 			&colors[i][0], 3, (unsigned int)adj_vertices[i].size(),
 			(unsigned int)adj_faces[i].size(), sh_order, 
-			params.use_normal_for_shape);
+			params.use_normal_for_shape, params.use_lower_bound_shading,
+			params.use_upper_bound_shading);
 
 		ceres::DynamicAutoDiffCostFunction<ResidualPhotometricError, 5>* dyn_cost_function
 			= new ceres::DynamicAutoDiffCostFunction< ResidualPhotometricError, 5 >(residual);
@@ -1143,6 +1389,38 @@ void BlackBox::updateVertices(vector<double> &_vertices_disp)
 		vertices[i][0] += _vertices_disp[i] * normals[i][0];
 		vertices[i][1] += _vertices_disp[i] * normals[i][1];
 		vertices[i][2] += _vertices_disp[i] * normals[i][2];
+	}
+}
+//=============================================================================
+void BlackBox::updateShadings()
+{
+	for (size_t i = 0; i < n_vertices; i++)
+	{
+		shadings[i] = computeShading(normals[i], sh_coeff, sh_order);
+	}
+}
+//=============================================================================
+void BlackBox::updateAlbedos()
+{
+	for (size_t i = 0; i < n_vertices; i++)
+	{
+		for (size_t j = 0; j < 3; j++)
+		{
+			switch (params.albedo_initialization)
+			{
+			case WHITE_ALBEDO:
+				albedos[i][j] = 1;
+				break;
+			case COLOR_ALBEDO:
+				albedos[i][j] = colors[i][j];
+				break;
+			case EST_ALBEDO:
+				albedos[i][j] = colors[i][j] / shadings[i];
+				break;
+			default:
+				break;
+			}
+		}
 	}
 }
 //=============================================================================

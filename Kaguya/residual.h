@@ -2,6 +2,149 @@
 
 using namespace std;
 
+template<typename T>
+void compnorm(const T* ver1, const T* ver2, const T* ver3, T* location,
+	bool clockwise = false)
+{
+	// compute normals assume that the normal at each point
+	//   is defined by the triangle consisting of the previous two
+	//   points + current point.
+	//   (p1-p3) x (p1-p2)
+
+	T norm[3];
+	T a[3];
+	T b[3];
+
+	if (clockwise)
+	{
+		a[0] = ver1[0] - ver3[0];
+		a[1] = ver1[1] - ver3[1];
+		a[2] = ver1[2] - ver3[2];
+
+		b[0] = ver1[0] - ver2[0];
+		b[1] = ver1[1] - ver2[1];
+		b[2] = ver1[2] - ver2[2];
+	}
+	else	// Anti-clockwsie
+	{
+		a[0] = ver1[0] - ver2[0];
+		a[1] = ver1[1] - ver2[1];
+		a[2] = ver1[2] - ver2[2];
+
+		b[0] = ver1[0] - ver3[0];
+		b[1] = ver1[1] - ver3[1];
+		b[2] = ver1[2] - ver3[2];
+	}
+
+	norm[0] = a[1] * b[2] - a[2] * b[1];
+	norm[1] = a[2] * b[0] - a[0] * b[2];
+	norm[2] = a[0] * b[1] - a[1] * b[0];
+
+	T normalization = sqrt(norm[1] * norm[1] + norm[2] * norm[2] + norm[0] * norm[0]);
+	if (normalization != T(0.0))
+	{
+		norm[0] /= normalization;
+		norm[1] /= normalization;
+		norm[2] /= normalization;
+	}
+
+	location[0] = norm[0];
+	location[1] = norm[1];
+	location[2] = norm[2];
+}
+
+// Computes vertex normal direction given its position, its one-ring neighbours 
+// and the corresponding face indexes. Can handle clockwise and counter-clockwise
+template <typename T>
+void computeNormal(const T* p, const vector<T*> &adjP,
+	const int n_faces, const bool clockwise, T* normal)
+{
+	normal[0] = T(0.0);
+	normal[1] = T(0.0);
+	normal[2] = T(0.0);
+
+	for (int i = 0; i < n_faces; i++)
+	{
+		unsigned int vIdx1 = i;
+		unsigned int vIdx2 = (i + 1) % adjP.size();
+
+		T face_normal[3];
+		compnorm(p, adjP[vIdx1], adjP[vIdx2], face_normal);
+
+		normal[0] += face_normal[0];
+		normal[1] += face_normal[1];
+		normal[2] += face_normal[2];
+	}
+
+	T norm = sqrt(normal[1] * normal[1] + normal[2] * normal[2] + normal[0] * normal[0]);
+	if (norm != T(0.0))
+	{
+		normal[0] /= norm;
+		normal[1] /= norm;
+		normal[2] /= norm;
+	}
+}
+
+// Computes shading value given normal direction, spherical harmonic coefficients 
+// and the SH order
+template <typename T>
+T computeShading(const T* _normal, const T* _sh_coeff,
+	const unsigned int _sh_order)
+{
+	T n_x = _normal[0];
+	T n_y = _normal[1];
+	T n_z = _normal[2];
+
+	T n_x2 = n_x * n_x;
+	T n_y2 = n_y * n_y;
+	T n_z2 = n_z * n_z;
+	T n_xy = n_x * n_y;
+	T n_xz = n_x * n_z;
+	T n_yz = n_y * n_z;
+	T n_x2_y2 = n_x2 - n_y2;
+
+	T shading = T(_sh_coeff[0]);
+
+	if (_sh_order > 0)
+		shading = shading
+		+ T(_sh_coeff[1]) * n_x					// x
+		+ T(_sh_coeff[2]) * n_y					// y
+		+ T(_sh_coeff[3]) * n_z;				// z
+
+	if (_sh_order > 1)
+		shading = shading
+		+ T(_sh_coeff[4]) * n_xy						// x * y
+		+ T(_sh_coeff[5]) * n_xz						// x * z
+		+ T(_sh_coeff[6]) * n_yz						// y * z
+		+ T(_sh_coeff[7]) * n_x2_y2						// x^2 - y^2
+		+ T(_sh_coeff[8]) * (T(3.0) * n_z2 - T(1.0));	// 3 * z^2 - 1
+
+	if (_sh_order > 2)
+		shading = shading
+		+ T(_sh_coeff[9]) * (T(3.0) * n_x2 - n_y2) * n_y		// (3 * x^2 - y^2) * y 
+		+ T(_sh_coeff[10]) * n_x * n_y * n_z					// x * y * z
+		+ T(_sh_coeff[11]) * (T(5.0) * n_z2 - T(1.0)) * n_y		// (5 * z^2 - 1) * y
+		+ T(_sh_coeff[12]) * (T(5.0) * n_z2 - T(3.0)) * n_z		// (5 * z^2 - 3) * z
+		+ T(_sh_coeff[13]) * (T(5.0) * n_z2 - T(1.0)) * n_x		// (5 * z^2 - 1) * x
+		+ T(_sh_coeff[14]) * n_x2_y2 * n_z						// (x^2 - y^2) * z
+		+ T(_sh_coeff[15]) * (n_x2 - T(3.0) * n_y2) * n_x;		// (x^2 - 3 * y^2) * x
+
+	if (_sh_order > 3)
+		shading = shading
+		+ T(_sh_coeff[16]) * n_x2_y2 * n_x * n_y								// (x^2 - y^2) * x * y
+		+ T(_sh_coeff[17]) * (T(3.0) * n_x2 - n_y2) * n_yz						// (3 * x^2 - y^2) * yz
+		+ T(_sh_coeff[18]) * (T(7.0) * n_z2 - T(1.0)) * n_xy					// (7 * z^2 - 1) * x * y
+		+ T(_sh_coeff[19]) * (T(7.0) * n_z2 - T(3.0)) * n_yz					// (7 * z^2 - 3) * y * z
+		+ T(_sh_coeff[20]) * (T(3.0) - T(30.0) * n_z2 + T(35.0) * n_z2 * n_z2)	// 3 - 30 * z^2 + 35 * z^4
+		+ T(_sh_coeff[21]) * (T(7.0) * n_z - T(3.0)) * n_xz						// (7 * z^2 - 3) * x * z
+		+ T(_sh_coeff[22]) * (T(7.0) * n_z - T(1.0)) * n_x2_y2					// (7 * z^2 - 1) * (x^2 - y^2)
+		+ T(_sh_coeff[23]) * (n_x2 - T(3.0) * n_y2) * n_xz						// (x^2 - 3 * y^2) * x * z
+		+ T(_sh_coeff[24]) * ((n_x2 - T(3.0) * n_y2) * n_x2						// (x^2 - 3 * y^2) * x^2 - (3 * x^2 - y^2) * y^2 
+		- (T(3.0) * n_x2 - n_y2) * n_y2);
+
+	return shading;
+}
+
 // Photometric cost for the case of known albedo and illumination (sh representation)
 class ResidualPhotometricError
 {
@@ -11,13 +154,17 @@ public:
 		const unsigned int &_n_adj_vertices, 
 		const unsigned int &_n_adj_faces,
 		const unsigned int _sh_order,
-		const bool _optimize_using_normal = false) :
+		const bool _optimize_using_normal = false,
+		const bool _use_lower_bound_shading = false,
+		const bool _use_upper_bound_shading = false) :
 		intensity(_intensity),
 		n_channels(_n_channels),
 		n_adj_vertices(_n_adj_vertices),
 		n_adj_faces(_n_adj_faces),
 		sh_order(_sh_order),
-		optimize_using_normal(_optimize_using_normal)
+		optimize_using_normal(_optimize_using_normal),
+		use_lower_bound_shading(_use_lower_bound_shading),
+		use_upper_bound_shading(_use_upper_bound_shading)
 	{
 
 	}
@@ -109,157 +256,25 @@ public:
 			residuals[i] = T(intensity[i]) - est_value;
 		}
 
-		bool shading_in_bounds = shading >= T(0.0) && shading <= T(1.0);
+		bool shading_in_bounds = true;
+		
+		if (use_lower_bound_shading)
+		{
+			shading_in_bounds = shading_in_bounds && shading >= T(0.0);
+		}
+
+		if (use_upper_bound_shading)
+		{
+			shading_in_bounds = shading_in_bounds && shading <= T(1.0);
+		}
 
 		return shading_in_bounds;
-	}
-
-	template<typename T>
-	void compnorm(const T* ver1, const T* ver2, const T* ver3, T* location,
-		bool clockwise = false) const
-	{
-		// compute normals assume that the normal at each point
-		//   is defined by the triangle consisting of the previous two
-		//   points + current point.
-		//   (p1-p3) x (p1-p2)
-
-		T norm[3];
-		T a[3];
-		T b[3];
-
-		if (clockwise)
-		{
-			a[0] = ver1[0] - ver3[0];
-			a[1] = ver1[1] - ver3[1];
-			a[2] = ver1[2] - ver3[2];
-
-			b[0] = ver1[0] - ver2[0];
-			b[1] = ver1[1] - ver2[1];
-			b[2] = ver1[2] - ver2[2];
-		}
-		else	// Anti-clockwsie
-		{
-			a[0] = ver1[0] - ver2[0];
-			a[1] = ver1[1] - ver2[1];
-			a[2] = ver1[2] - ver2[2];
-
-			b[0] = ver1[0] - ver3[0];
-			b[1] = ver1[1] - ver3[1];
-			b[2] = ver1[2] - ver3[2];
-		}
-
-		norm[0] = a[1] * b[2] - a[2] * b[1];
-		norm[1] = a[2] * b[0] - a[0] * b[2];
-		norm[2] = a[0] * b[1] - a[1] * b[0];
-
-		T normalization = sqrt(norm[1] * norm[1] + norm[2] * norm[2] + norm[0] * norm[0]);
-		if (normalization != T(0.0))
-		{
-			norm[0] /= normalization;
-			norm[1] /= normalization;
-			norm[2] /= normalization;
-		}
-
-		location[0] = norm[0];
-		location[1] = norm[1];
-		location[2] = norm[2];
-	}
-
-	// Computes vertex normal direction given its position, its one-ring neighbours 
-	// and the corresponding face indexes. Can handle clockwise and counter-clockwise
-	template <typename T>
-	void computeNormal(const T* p, const vector<T*> &adjP,
-		const int n_faces, const bool clockwise, T* normal) const
-	{
-		normal[0] = T(0.0);
-		normal[1] = T(0.0);
-		normal[2] = T(0.0);
-
-		for (int i = 0; i < n_faces; i++)
-		{
-			unsigned int vIdx1 = i;
-			unsigned int vIdx2 = (i + 1) % adjP.size();
-
-			T face_normal[3];
-			compnorm(p, adjP[vIdx1], adjP[vIdx2], face_normal);
-
-			normal[0] += face_normal[0];
-			normal[1] += face_normal[1];
-			normal[2] += face_normal[2];
-		}
-
-		T norm = sqrt(normal[1] * normal[1] + normal[2] * normal[2] + normal[0] * normal[0]);
-		if (norm != T(0.0))
-		{
-			normal[0] /= norm;
-			normal[1] /= norm;
-			normal[2] /= norm;
-		}
-	}
-
-	// Computes shading value given normal direction, spherical harmonic coefficients 
-	// and the SH order
-	template <typename T>
-	T computeShading(const T* _normal, const T* _sh_coeff,
-		const unsigned int _sh_order) const
-	{
-		T n_x = _normal[0];
-		T n_y = _normal[1];
-		T n_z = _normal[2];
-
-		T n_x2 = n_x * n_x;
-		T n_y2 = n_y * n_y;
-		T n_z2 = n_z * n_z;
-		T n_xy = n_x * n_y;
-		T n_xz = n_x * n_z;
-		T n_yz = n_y * n_z;
-		T n_x2_y2 = n_x2 - n_y2;
-
-		T shading = T(_sh_coeff[0]);
-
-		if (_sh_order > 0)
-			shading = shading
-			+ T(_sh_coeff[1]) * n_x					// x
-			+ T(_sh_coeff[2]) * n_y					// y
-			+ T(_sh_coeff[3]) * n_z;				// z
-
-		if (_sh_order > 1)
-			shading = shading
-			+ T(_sh_coeff[4]) * n_xy						// x * y
-			+ T(_sh_coeff[5]) * n_xz						// x * z
-			+ T(_sh_coeff[6]) * n_yz						// y * z
-			+ T(_sh_coeff[7]) * n_x2_y2						// x^2 - y^2
-			+ T(_sh_coeff[8]) * (T(3.0) * n_z2 - T(1.0));	// 3 * z^2 - 1
-
-		if (_sh_order > 2)
-			shading = shading
-			+ T(_sh_coeff[9]) * (T(3.0) * n_x2 - n_y2) * n_y		// (3 * x^2 - y^2) * y 
-			+ T(_sh_coeff[10]) * n_x * n_y * n_z					// x * y * z
-			+ T(_sh_coeff[11]) * (T(5.0) * n_z2 - T(1.0)) * n_y		// (5 * z^2 - 1) * y
-			+ T(_sh_coeff[12]) * (T(5.0) * n_z2 - T(3.0)) * n_z		// (5 * z^2 - 3) * z
-			+ T(_sh_coeff[13]) * (T(5.0) * n_z2 - T(1.0)) * n_x		// (5 * z^2 - 1) * x
-			+ T(_sh_coeff[14]) * n_x2_y2 * n_z						// (x^2 - y^2) * z
-			+ T(_sh_coeff[15]) * (n_x2 - T(3.0) * n_y2) * n_x;		// (x^2 - 3 * y^2) * x
-
-		if (_sh_order > 3)
-			shading = shading
-			+ T(_sh_coeff[16]) * n_x2_y2 * n_x * n_y								// (x^2 - y^2) * x * y
-			+ T(_sh_coeff[17]) * (T(3.0) * n_x2 - n_y2) * n_yz						// (3 * x^2 - y^2) * yz
-			+ T(_sh_coeff[18]) * (T(7.0) * n_z2 - T(1.0)) * n_xy					// (7 * z^2 - 1) * x * y
-			+ T(_sh_coeff[19]) * (T(7.0) * n_z2 - T(3.0)) * n_yz					// (7 * z^2 - 3) * y * z
-			+ T(_sh_coeff[20]) * (T(3.0) - T(30.0) * n_z2 + T(35.0) * n_z2 * n_z2)	// 3 - 30 * z^2 + 35 * z^4
-			+ T(_sh_coeff[21]) * (T(7.0) * n_z - T(3.0)) * n_xz						// (7 * z^2 - 3) * x * z
-			+ T(_sh_coeff[22]) * (T(7.0) * n_z - T(1.0)) * n_x2_y2					// (7 * z^2 - 1) * (x^2 - y^2)
-			+ T(_sh_coeff[23]) * (n_x2 - T(3.0) * n_y2) * n_xz						// (x^2 - 3 * y^2) * x * z
-			+ T(_sh_coeff[24]) * ((n_x2 - T(3.0) * n_y2) * n_x2						// (x^2 - 3 * y^2) * x^2 - (3 * x^2 - y^2) * y^2 
-			- (T(3.0) * n_x2 - n_y2) * n_y2);
-
-		return shading;
 	}
 
 private:
 	// Vertex intensity
 	const Intensity* intensity;
+
 	// Number of color channels
 	const unsigned int n_channels;
 
@@ -273,6 +288,359 @@ private:
 
 	// Optimize displacement in the direction of the normal
 	const bool optimize_using_normal;
+
+	// Constrain lower and/or upper shading bound
+	const bool use_lower_bound_shading;
+	const bool use_upper_bound_shading;
+};
+
+// Photometric cost for the case of known shape and albedo (sh coeff estimation)
+class ResidualPhotometricErrorSHCoeff
+{
+public:
+	ResidualPhotometricErrorSHCoeff(const Intensity* _intensity,
+		const unsigned int _n_channels, const Intensity* _albedo,
+		const Intensity* _lighting_variation, const Normal &_normal, 
+		const unsigned int _sh_order,
+		const bool _use_lower_bound_shading = false,
+		const bool _use_upper_bound_shading = false) :
+		intensity(_intensity),
+		n_channels(_n_channels),
+		albedo(_albedo),
+		lighting_variation(_lighting_variation),
+		normal(_normal),
+		sh_order(_sh_order),
+		use_lower_bound_shading(_use_lower_bound_shading),
+		use_upper_bound_shading(_use_upper_bound_shading)
+	{
+
+	}
+
+	template<typename T>
+	bool operator()(const T* const _sh_coeff, T* residuals) const
+	{
+		T shading = computeShading(normal, _sh_coeff, sh_order);
+
+		for (size_t i = 0; i < n_channels; ++i)
+		{
+			T est_value = albedo[i] * shading + T(lighting_variation[i]);
+			residuals[i] = T(intensity[i]) - est_value;
+		}
+
+		bool shading_in_bounds = true;
+
+		if (use_lower_bound_shading)
+		{
+			shading_in_bounds = shading_in_bounds && shading >= T(0.0);
+		}
+
+		if (use_upper_bound_shading)
+		{
+			shading_in_bounds = shading_in_bounds && shading <= T(1.0);
+		}
+
+		return shading_in_bounds;
+	}
+
+private:
+	// Vertex intensity
+	const Intensity* intensity;
+
+	// Number of color channels
+	const unsigned int n_channels;
+
+	// Vertex albedo value
+	const Intensity* albedo;
+
+	// Vertex lighting variation
+	const Intensity* lighting_variation;
+
+	// Vertex normal vector
+	const Normal &normal;
+
+	// SH order
+	const unsigned int sh_order;
+
+	// Constrain lower and/or upper shading bound
+	const bool use_lower_bound_shading;
+	const bool use_upper_bound_shading;
+};
+
+// Photometric cost for the case of known shading (albedo estimation)
+class ResidualPhotometricErrorAlbedo
+{
+public:
+	ResidualPhotometricErrorAlbedo(const Intensity* _intensity,
+		const unsigned int _n_channels, const Intensity _shading, 
+		const Intensity* _lighting_variation) :
+		intensity(_intensity),
+		n_channels(_n_channels),
+		shading(_shading),
+		lighting_variation(_lighting_variation)
+	{
+
+	}
+
+	template<typename T>
+	bool operator()(const T* const _albedo, T* residuals) const
+	{
+		for (size_t i = 0; i < n_channels; ++i)
+		{
+			T est_value = _albedo[i] * T(shading) + lighting_variation[i];
+			residuals[i] = T(intensity[i]) - est_value;
+		}
+
+		return true;
+	}
+
+private:
+	// Vertex intensity
+	const Intensity* intensity;
+
+	// Number of color channels
+	const unsigned int n_channels;
+
+	// Vertex shading value
+	const Intensity shading;
+
+	// Vertex lighting variation
+	const Intensity* lighting_variation;
+};
+
+// Photometric cost for the case of known albedo and shading 
+// (lighting variation estimation)
+class ResidualPhotometricErrorLightingVariation
+{
+public:
+	ResidualPhotometricErrorLightingVariation(const Intensity* _intensity,
+		const unsigned int _n_channels, const Intensity* _diffuse_intensity) :
+		intensity(_intensity),
+		n_channels(_n_channels),
+		diffuse_intensity(_diffuse_intensity)
+	{
+
+	}
+
+	template<typename T>
+	bool operator()(const T* const _lighting_variation, T* residuals) const
+	{
+		for (size_t i = 0; i < n_channels; ++i)
+		{
+			T est_value = T(diffuse_intensity[i]) + _lighting_variation[i];
+			residuals[i] = T(intensity[i]) - est_value;
+		}
+
+		return true;
+	}
+
+private:
+	// Vertex intensity
+	const Intensity* intensity;
+
+	// Number of color channels
+	const unsigned int n_channels;
+
+	// Vertex estimated diffuse component
+	const Intensity* diffuse_intensity;
+};
+
+// Photometric cost for the case of known shading 
+// (albedo and lighting variation estimation)
+class ResidualPhotometricErrorAlbedoLightingVariation
+{
+public:
+	ResidualPhotometricErrorAlbedoLightingVariation(const Intensity* _intensity,
+		const unsigned int _n_channels, const Intensity _shading) :
+		intensity(_intensity),
+		n_channels(_n_channels),
+		shading(_shading)
+	{
+
+	}
+
+	template<typename T>
+	bool operator()(const T* const _albedo, 
+		const T* const _lighting_variation, T* residuals) const
+	{
+		for (size_t i = 0; i < n_channels; ++i)
+		{
+			T est_value = _albedo[i] * T(shading) + _lighting_variation[i];
+			residuals[i] = T(intensity[i]) - est_value;
+		}
+
+		return true;
+	}
+
+private:
+	// Vertex intensity
+	const Intensity* intensity;
+
+	// Number of color channels
+	const unsigned int n_channels;
+
+	// Vertex shading
+	const Intensity shading;
+};
+
+// Photometric cost for the case of known albedo and shading
+// (shape estimation)
+class ResidualPhotometricErrorShape
+{
+public:
+	ResidualPhotometricErrorShape(const Intensity* _intensity,
+		const unsigned int _n_channels,
+		const Intensity* _albedo, const Intensity* _lighting_variation,
+		const unsigned int &_n_adj_vertices,
+		const unsigned int &_n_adj_faces,
+		const Intensity *_sh_coeff,
+		const unsigned int _sh_order,
+		const bool _optimize_using_normal = false,
+		const bool _use_lower_bound_shading = false,
+		const bool _use_upper_bound_shading = false) :
+		intensity(_intensity),
+		n_channels(_n_channels),
+		albedo(_albedo),
+		lighting_variation(_lighting_variation),
+		n_adj_vertices(_n_adj_vertices),
+		n_adj_faces(_n_adj_faces),
+		sh_coeff(_sh_coeff),
+		sh_order(_sh_order),
+		optimize_using_normal(_optimize_using_normal),
+		use_lower_bound_shading(_use_lower_bound_shading),
+		use_upper_bound_shading(_use_upper_bound_shading)
+	{
+
+	}
+
+	template<typename T>
+	bool operator()(const T* const* const parameters, T* residuals) const
+	{
+		const T* vertex = parameters[0];
+		T* v = new T[3];
+		v[0] = vertex[0];
+		v[1] = vertex[1];
+		v[2] = vertex[2];
+
+		unsigned int param_idx = 1;
+
+		vector<const T*> adj_vertices;
+		adj_vertices.reserve(n_adj_vertices);
+
+		vector<T*> adj_v;
+		adj_v.reserve(n_adj_vertices);
+
+		for (size_t i = 0; i < n_adj_vertices; i++)
+		{
+			const T* v_neighbour = parameters[param_idx];
+			adj_vertices.push_back(v_neighbour);
+
+			T* v_n = new T[3];
+			v_n[0] = v_neighbour[0];
+			v_n[1] = v_neighbour[1];
+			v_n[2] = v_neighbour[2];
+
+			adj_v.push_back(v_n);
+
+			param_idx++;
+		}
+
+		if (optimize_using_normal)
+		{
+			const T *vertex_normal = parameters[param_idx];
+
+			param_idx++;
+
+			vector<const T*> adj_normals;
+			adj_normals.reserve(n_adj_vertices);
+			for (size_t i = 0; i < n_adj_vertices; i++)
+			{
+				const T* v_neighbour_normal = parameters[param_idx];
+				adj_normals.push_back(v_neighbour_normal);
+
+				param_idx++;
+			}
+
+			const T *vertex_disp = parameters[param_idx];
+			v[0] += vertex_disp[0] * vertex_normal[0];
+			v[1] += vertex_disp[0] * vertex_normal[1];
+			v[2] += vertex_disp[0] * vertex_normal[2];
+
+			param_idx++;
+
+			for (size_t i = 0; i < n_adj_vertices; i++)
+			{
+				const T* v_neighbour_disp = parameters[param_idx];
+
+				adj_v[i][0] += v_neighbour_disp[0] * adj_normals[i][0];
+				adj_v[i][1] += v_neighbour_disp[0] * adj_normals[i][1];
+				adj_v[i][2] += v_neighbour_disp[0] * adj_normals[i][2];
+
+				param_idx++;
+			}
+		}
+
+		T normal[3];
+		computeNormal(&v[0], adj_v, n_adj_faces, false, normal);
+
+		delete[] v;
+		for (size_t i = 0; i < n_adj_vertices; i++)
+		{
+			delete[] adj_v[i];
+		}
+
+		T shading = computeShading(normal, sh_coeff, sh_order);
+
+		for (size_t i = 0; i < n_channels; ++i)
+		{
+			T est_value = T(albedo[i]) * shading + T(lighting_variation[i]);
+			residuals[i] = T(intensity[i]) - est_value;
+		}
+
+		bool shading_in_bounds = true;
+
+		if (use_lower_bound_shading)
+		{
+			shading_in_bounds = shading_in_bounds && shading >= T(0.0);
+		}
+
+		if (use_upper_bound_shading)
+		{
+			shading_in_bounds = shading_in_bounds && shading <= T(1.0);
+		}
+
+		return shading_in_bounds;
+	}
+
+private:
+	// Vertex intensity
+	const Intensity* intensity;
+
+	// Number of color channels
+	const unsigned int n_channels;
+
+	// Vertex albedo value
+	const Intensity* albedo;
+
+	// Vertex lighting variation
+	const Intensity* lighting_variation;
+
+	// Number of adjacent vertices
+	const unsigned int n_adj_vertices;
+	// Number of adjacent faces
+	const unsigned int n_adj_faces;
+
+	// SH coefficients
+	const Intensity *sh_coeff;
+
+	// SH order
+	const unsigned int sh_order;
+
+	// Optimize displacement in the direction of the normal
+	const bool optimize_using_normal;
+
+	// Constrain lower and/or upper shading bound
+	const bool use_lower_bound_shading;
+	const bool use_upper_bound_shading;
 };
 
 // Residual of difference between values of neighbour vertices
