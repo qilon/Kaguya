@@ -1,35 +1,46 @@
 #ifndef PARAMETERS_H_
 #define PARAMETERS_H_
 
-#define SH_ORDER						"sh_order"
-
+// SH Coefficients estimation
+#define SH_ORDER				"sh_order"
 #define ALBEDO_PERCENTILE		"albedo_percentile"
+#define USE_LOWER_BOUND_SHADING	"use_lower_bound_shading"
+#define USE_UPPER_BOUND_SHADING	"use_upper_bound_shading"
+
+// Smoothing Weight
 #define COLOR_DIFF_THRESHOLD	"color_diff_threshold"
 #define COLOR_DIFF_VAR			"color_diff_var"
 #define DEPTH_DIFF_VAR			"depth_diff_var"
-
 #define USE_DEPTH_WEIGHT		"use_depth_weight"
 
-#define SMOOTH_ALBEDO_WEIGHT			"smooth_albedo_weight"
-#define SMOOTH_LOCAL_LIGHTING_WEIGHT	"smooth_local_lighting_weight"
-#define LOCAL_LIGHTING_MAGNITUDE_WEIGHT	"local_lighting_magnitude_weight"
-#define DISPLACEMENT_WEIGHT				"displacement_weight"
-#define LAPLACIAN_SMOOTH_WEIGHT			"laplacian_smooth_weight"
-#define TV_WEIGHT						"tv_weight"
+// Albedo estimation
+#define SMOOTH_ALBEDO_WEIGHT		"smooth_albedo_weight"
+#define SMOOTH_ALBEDO_HUBER_WIDTH	"smooth_albedo_huber_width"
+#define USE_LOWER_BOUND_ALBEDO		"use_lower_bound_albedo"
+#define USE_UPPER_BOUND_ALBEDO		"use_upper_bound_albedo"
+#define ALBEDO_INITIALIZATION		"albedo_initialization"
+#define WHITE_ALBEDO	0
+#define COLOR_ALBEDO	1
+#define EST_ALBEDO		2
 
-#define SMOOTH_ALBEDO_HUBER_WIDTH			"smooth_albedo_huber_width"
+// Local lighting variation estimation
+#define SMOOTH_LOCAL_LIGHTING_WEIGHT		"smooth_local_lighting_weight"
+#define LOCAL_LIGHTING_MAGNITUDE_WEIGHT		"local_lighting_magnitude_weight"
 #define SMOOTH_LOCAL_LIGHTING_HUBER_WIDTH	"smooth_local_lighting_huber_width"
 #define LOCAL_LIGHTING_MAGNITUDE_HUBER_WIDTH "local_lighting_magnitude_huber_width"
+#define USE_LOWER_BOUND_LIGHTING			"use_lower_bound_lighting"
+#define USE_UPPER_BOUND_LIGHTING			"use_upper_bound_lighting"
 
+// Join estimation of albedo and local lighting variation
 #define COMBINE_ALBEDO_LIGHTING "combine_albedo_lighting"
-#define USE_NORMAL_FOR_SHAPE	"use_normal_for_shape"
-#define USE_LOWER_BOUND_ALBEDO	"use_lower_bound_albedo"
-#define USE_UPPER_BOUND_ALBEDO	"use_upper_bound_albedo"
-#define USE_LOWER_BOUND_SHADING	"use_lower_bound_shading"
-#define USE_UPPER_BOUND_SHADING	"use_upper_bound_shading"
-#define USE_LOWER_BOUND_LIGHTING	"use_lower_bound_lighting"
-#define USE_UPPER_BOUND_LIGHTING	"use_upper_bound_lighting"
 
+// Shape from shading
+#define DISPLACEMENT_WEIGHT		"displacement_weight"
+#define LAPLACIAN_SMOOTH_WEIGHT	"laplacian_smooth_weight"
+#define TV_WEIGHT				"tv_weight"
+#define USE_NORMAL_FOR_SHAPE	"use_normal_for_shape"
+
+// Huber width for data terms
 #define DATA_HUBER_WIDTH	"data_huber_width"
 
 // I/O parameters
@@ -51,20 +62,6 @@
 #define SAVE_EST_INTENSITY	"save_est_intensity"
 #define SAVE_ORIG_INTENSITY	"save_orig_intensity"
 #define SAVE_MESH_BINARY	"save_mesh_binary"
-
-#define INPUT_SH_COEFF_FILENAME	"input_sh_coeff_filename"
-#define MODE				"mode"
-#define ESTIMATE_SH_COEFF	0
-#define DECOMPOSE_INTRINSIC	1
-#define MIN_GRAY						"min_gray"
-#define MAX_GRAY						"max_gray"
-#define MAX_SHADING			"max_shading"
-#define USE_MASK_VALUES		"use_mask_values"
-
-#define ALBEDO_INITIALIZATION	"albedo_initialization"
-#define WHITE_ALBEDO	0
-#define COLOR_ALBEDO	1
-#define EST_ALBEDO		2
 
 // Ceres options root
 #define CERES_SOLVER "ceres_solver"
@@ -731,49 +728,55 @@ using namespace std;
 
 		// Default constructor that sets up a generic sparse problem.
 		Parameters() {
-			sh_order = 2;
+			// Data terms Huber width
+			data_huber_width.resize(NUM_OPTIMIZATIONS, 0);
 
+			// SH Coefficients estimation
+			sh_order = 2;
 			albedo_percentile = 0.98;
+			use_lower_bound_shading = false;
+			use_upper_bound_shading = false;
+
+			// Smoothing Weight
 			color_diff_threshold = 0.5;
 			color_diff_var = 0.05;
 			depth_diff_var = 50;
-
 			use_depth_weight = true;
 
+			// Albedo estimation
 			smooth_albedo_weight = 0.1;
-			smooth_local_lighting_weight = 1.0;
-			local_lighting_magnitude_weight = 1.0;
-			displacement_weight = 4e-3;
-			laplacian_smooth_weight = 7.5e-3;
-			tv_weight = 7.5e-3;
-
-			combine_albedo_lighting = false;
-
-			use_normal_for_shape = false;
+			smooth_albedo_huber_width = 0;
 			use_lower_bound_albedo = false;
 			use_upper_bound_albedo = false;
-			use_lower_bound_shading = false;
-			use_upper_bound_shading = false;
+			albedo_initialization = WHITE_ALBEDO;
+
+			// Local lighting variation estimation
+			smooth_local_lighting_weight = 1.0;
+			local_lighting_magnitude_weight = 1.0;
+			smooth_local_lighting_huber_width = 0;
+			local_lighting_magnitude_huber_width = 0;
 			use_lower_bound_lighting = false;
 			use_upper_bound_lighting = false;
 
-			data_huber_width.resize(NUM_OPTIMIZATIONS, 0);
+			// Join estimation of albedo and local lighting variation
+			combine_albedo_lighting = false;
 
-			smooth_albedo_huber_width = 0;
-			smooth_local_lighting_huber_width = 0;
-			local_lighting_magnitude_huber_width = 0;
+			// Shape from shading
+			displacement_weight = 4e-3;
+			laplacian_smooth_weight = 7.5e-3;
+			tv_weight = 7.5e-3;
+			use_normal_for_shape = false;
 
-			albedo_initialization = WHITE_ALBEDO;
-			
-			input_mesh_filename = "C:/Users/Qi/Desktop/generated/mesh_0180_albedo_0001.ply";
+			// I/O parameters
+			input_mesh_filename = "C:/template.ply";
 
-			output_sh_coeff_filename = "C:/Users/Qi/Desktop/generated/sh_coeff.txt";
-			output_albedo_mesh_filename = "C:/Users/Qi/Desktop/generated/mesh_0180_albedo.ply";
-			output_shading_mesh_filename = "C:/Users/Qi/Desktop/generated/mesh_0180_shading.ply";
-			output_local_lighting_mesh_filename = "C:/Users/Qi/Desktop/generated/mesh_0180_shading.ply";
-			output_est_diffuse_mesh_filename = "C:/Users/Qi/Desktop/generated/mesh_0180_diffuse.ply";
-			output_est_intensity_mesh_filename = "C:/Users/Qi/Desktop/generated/mesh_0180_intensity.ply";
-			output_orig_intensity_mesh_filename = "C:/Users/Qi/Desktop/generated/mesh_0180_intensity.ply";
+			output_sh_coeff_filename = "C:/sh_coeff.txt";
+			output_albedo_mesh_filename = "C:/albedo.ply";
+			output_shading_mesh_filename = "C:/shading.ply";
+			output_local_lighting_mesh_filename = "C:/local_lighting.ply";
+			output_est_diffuse_mesh_filename = "C:/diffuse.ply";
+			output_est_intensity_mesh_filename = "C:/est_intensity.ply";
+			output_orig_intensity_mesh_filename = "C:/orig_intensity.ply";
 
 			save_sh_coeff = true;
 			save_albedo = true;
@@ -785,51 +788,48 @@ using namespace std;
 			save_mesh_binary = true;
 
 			ceres_solver = SolverOptions();
-
-			//mode = ESTIMATE_SH_COEFF;
-			////min_gray = 0.3f;
-			////max_gray = 0.598f;
-			//min_gray = 0.4f;
-			//max_gray = 0.7f;
-			//max_shading = 1.0f;
-			//use_mask_values = true;
 		}
 
+		// Data terms Huber width
+		vector<double> data_huber_width;
 
+		// SH Coefficients estimation
 		int sh_order;
-
 		double albedo_percentile;
+		bool use_lower_bound_shading;
+		bool use_upper_bound_shading;
+
+		// Smoothing Weight
 		double color_diff_threshold;
 		double color_diff_var;
 		double depth_diff_var;
-
 		bool use_depth_weight;
 
+		// Albedo estimation
 		double smooth_albedo_weight;
-		double smooth_local_lighting_weight;
-		double local_lighting_magnitude_weight;
-		double displacement_weight;
-		double laplacian_smooth_weight;
-		double tv_weight;
-
-		bool combine_albedo_lighting;
-
-		bool use_normal_for_shape;
+		double smooth_albedo_huber_width;
 		bool use_lower_bound_albedo;
 		bool use_upper_bound_albedo;
-		bool use_lower_bound_shading;
-		bool use_upper_bound_shading;
+		int albedo_initialization;
+
+		// Local lighting variation estimation
+		double smooth_local_lighting_weight;
+		double local_lighting_magnitude_weight;
+		double smooth_local_lighting_huber_width;
+		double local_lighting_magnitude_huber_width;
 		bool use_lower_bound_lighting;
 		bool use_upper_bound_lighting;
 
-		vector<double> data_huber_width;
-		
-		double smooth_albedo_huber_width;
-		double smooth_local_lighting_huber_width;
-		double local_lighting_magnitude_huber_width;
+		// Join estimation of albedo and local lighting variation
+		bool combine_albedo_lighting;
 
-		int albedo_initialization;
+		// Shape from shading
+		double displacement_weight;
+		double laplacian_smooth_weight;
+		double tv_weight;
+		bool use_normal_for_shape;
 
+		// I/O parameters
 		string input_mesh_filename;
 
 		string output_sh_coeff_filename;
@@ -849,14 +849,15 @@ using namespace std;
 		bool save_orig_intensity;
 		bool save_mesh_binary;
 
+		// Ceres Solver options
 		SolverOptions ceres_solver;
 
-		// Load parameters from an ini file
+		// Load parameters from an YAML file
 		inline void Parameters::load(const std::string &_filename)
 		{
 			cv::FileStorage fs(_filename, cv::FileStorage::READ);
 
-			// I/O parameters
+			// SH Coefficients estimation
 			if (!fs[SH_ORDER].empty())
 			{
 				fs[SH_ORDER] >> sh_order;
@@ -867,6 +868,18 @@ using namespace std;
 				fs[ALBEDO_PERCENTILE] >> albedo_percentile;
 			}
 
+			if (!fs[USE_LOWER_BOUND_SHADING].empty())
+			{
+				fs[USE_LOWER_BOUND_SHADING] >> use_lower_bound_shading;
+			}
+
+			if (!fs[USE_UPPER_BOUND_SHADING].empty())
+			{
+				fs[USE_UPPER_BOUND_SHADING] >> use_upper_bound_shading;
+			}
+
+
+			// Smoothing Weight
 			if (!fs[COLOR_DIFF_THRESHOLD].empty())
 			{
 				fs[COLOR_DIFF_THRESHOLD] >> color_diff_threshold;
@@ -887,11 +900,35 @@ using namespace std;
 				fs[USE_DEPTH_WEIGHT] >> use_depth_weight;
 			}
 
+
+			// Albedo estimation
 			if (!fs[SMOOTH_ALBEDO_WEIGHT].empty())
 			{
 				fs[SMOOTH_ALBEDO_WEIGHT] >> smooth_albedo_weight;
 			}
 
+			if (!fs[SMOOTH_ALBEDO_HUBER_WIDTH].empty())
+			{
+				fs[SMOOTH_ALBEDO_HUBER_WIDTH] >> smooth_albedo_huber_width;
+			}
+
+			if (!fs[USE_LOWER_BOUND_ALBEDO].empty())
+			{
+				fs[USE_LOWER_BOUND_ALBEDO] >> use_lower_bound_albedo;
+			}
+
+			if (!fs[USE_UPPER_BOUND_ALBEDO].empty())
+			{
+				fs[USE_UPPER_BOUND_ALBEDO] >> use_upper_bound_albedo;
+			}
+
+			if (!fs[ALBEDO_INITIALIZATION].empty())
+			{
+				fs[ALBEDO_INITIALIZATION] >> albedo_initialization;
+			}
+
+
+			// Local lighting variation estimation
 			if (!fs[SMOOTH_LOCAL_LIGHTING_WEIGHT].empty())
 			{
 				fs[SMOOTH_LOCAL_LIGHTING_WEIGHT] >> smooth_local_lighting_weight;
@@ -902,6 +939,35 @@ using namespace std;
 				fs[LOCAL_LIGHTING_MAGNITUDE_WEIGHT] >> local_lighting_magnitude_weight;
 			}
 
+			if (!fs[SMOOTH_LOCAL_LIGHTING_HUBER_WIDTH].empty())
+			{
+				fs[SMOOTH_LOCAL_LIGHTING_HUBER_WIDTH] >> smooth_local_lighting_huber_width;
+			}
+
+			if (!fs[LOCAL_LIGHTING_MAGNITUDE_HUBER_WIDTH].empty())
+			{
+				fs[LOCAL_LIGHTING_MAGNITUDE_HUBER_WIDTH] >> local_lighting_magnitude_huber_width;
+			}
+
+			if (!fs[USE_LOWER_BOUND_LIGHTING].empty())
+			{
+				fs[USE_LOWER_BOUND_LIGHTING] >> use_lower_bound_lighting;
+			}
+
+			if (!fs[USE_UPPER_BOUND_LIGHTING].empty())
+			{
+				fs[USE_UPPER_BOUND_LIGHTING] >> use_upper_bound_lighting;
+			}
+
+
+			// Join estimation of albedo and local lighting variation
+			if (!fs[COMBINE_ALBEDO_LIGHTING].empty())
+			{
+				fs[COMBINE_ALBEDO_LIGHTING] >> combine_albedo_lighting;
+			}
+
+
+			// Shape from shading
 			if (!fs[DISPLACEMENT_WEIGHT].empty())
 			{
 				fs[DISPLACEMENT_WEIGHT] >> displacement_weight;
@@ -917,75 +983,25 @@ using namespace std;
 				fs[TV_WEIGHT] >> tv_weight;
 			}
 
-			if (!fs[COMBINE_ALBEDO_LIGHTING].empty())
-			{
-				fs[COMBINE_ALBEDO_LIGHTING] >> combine_albedo_lighting;
-			}
-
 			if (!fs[USE_NORMAL_FOR_SHAPE].empty())
 			{
 				fs[USE_NORMAL_FOR_SHAPE] >> use_normal_for_shape;
 			}
 
-			if (!fs[USE_LOWER_BOUND_ALBEDO].empty())
-			{
-				fs[USE_LOWER_BOUND_ALBEDO] >> use_lower_bound_albedo;
-			}
 
-			if (!fs[USE_UPPER_BOUND_ALBEDO].empty())
-			{
-				fs[USE_UPPER_BOUND_ALBEDO] >> use_upper_bound_albedo;
-			}
-
-			if (!fs[USE_LOWER_BOUND_SHADING].empty())
-			{
-				fs[USE_LOWER_BOUND_SHADING] >> use_lower_bound_shading;
-			}
-
-			if (!fs[USE_UPPER_BOUND_SHADING].empty())
-			{
-				fs[USE_UPPER_BOUND_SHADING] >> use_upper_bound_shading;
-			}
-
-			if (!fs[USE_LOWER_BOUND_LIGHTING].empty())
-			{
-				fs[USE_LOWER_BOUND_LIGHTING] >> use_lower_bound_lighting;
-			}
-
-			if (!fs[USE_UPPER_BOUND_LIGHTING].empty())
-			{
-				fs[USE_UPPER_BOUND_LIGHTING] >> use_upper_bound_lighting;
-			}
-
+			// Huber width for data terms
 			if (!fs[DATA_HUBER_WIDTH].empty())
 			{
 				fs[DATA_HUBER_WIDTH] >> data_huber_width;
 			}
 
-			if (!fs[SMOOTH_ALBEDO_HUBER_WIDTH].empty())
-			{
-				fs[SMOOTH_ALBEDO_HUBER_WIDTH] >> smooth_albedo_huber_width;
-			}
 
-			if (!fs[SMOOTH_LOCAL_LIGHTING_HUBER_WIDTH].empty())
-			{
-				fs[SMOOTH_LOCAL_LIGHTING_HUBER_WIDTH] >> smooth_local_lighting_huber_width;
-			}
-
-			if (!fs[LOCAL_LIGHTING_MAGNITUDE_HUBER_WIDTH].empty())
-			{
-				fs[LOCAL_LIGHTING_MAGNITUDE_HUBER_WIDTH] >> local_lighting_magnitude_huber_width;
-			}
-
-			if (!fs[ALBEDO_INITIALIZATION].empty())
-			{
-				fs[ALBEDO_INITIALIZATION] >> albedo_initialization;
-			}
-
+			// I/O parameters
 			if (!fs[INPUT_MESH_FILENAME].empty())
 			{
 				fs[INPUT_MESH_FILENAME] >> input_mesh_filename;
 			}
+
 
 			if (!fs[OUTPUT_SH_COEFF_FILENAME].empty())
 			{
@@ -1021,6 +1037,7 @@ using namespace std;
 			{
 				fs[OUTPUT_ORIG_INTENSITY_MESH_FILENAME] >> output_orig_intensity_mesh_filename;
 			}
+
 
 			if (!fs[SAVE_SH_COEFF].empty())
 			{
@@ -1062,6 +1079,7 @@ using namespace std;
 				fs[SAVE_MESH_BINARY] >> save_mesh_binary;
 			}
 
+			// Ceres Solver options
 			if (!fs[CERES_SOLVER].empty())
 			{
 				fs[CERES_SOLVER] >> ceres_solver;
