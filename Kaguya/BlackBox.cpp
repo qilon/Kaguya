@@ -93,15 +93,27 @@ void BlackBox::run()
 
 	if (params.combine_albedo_lighting)
 	{
+		updateLocalLightings();
+
 		estimateAlbedoLocalLighting(params.ceres_solver.options[1]);
 	}
 	else
 	{
 		estimateAlbedo(params.ceres_solver.options[1]);
+
+		updateLocalLightings();
 		estimateLocalLighting(params.ceres_solver.options[2]);
 	}
 
-	estimateShape(params.ceres_solver.options[3]);
+	if (params.estimate_shape)
+	{
+		estimateShape(params.ceres_solver.options[3]);
+	}
+
+	if (params.refine_solution)
+	{
+		refine();
+	}
 }
 //=============================================================================
 void BlackBox::save()
@@ -140,6 +152,17 @@ void BlackBox::save()
 		cout << "Writing mesh: " << params.output_local_lighting_mesh_filename
 			<< endl;
 
+		//ofstream ofs;
+		//ofs.open(params.output_local_lighting_mesh_filename, 
+		//	ofstream::out | ofstream::trunc);
+		//for (size_t i = 0; i < n_vertices; i++)
+		//{
+		//	ofs << local_lightings[i][0] << " "
+		//		<< local_lightings[i][1] << " "
+		//		<< local_lightings[i][2] << ";" << endl;
+		//}
+		//ofs.close();
+
 		writeMesh(mesh, params.output_local_lighting_mesh_filename, mesh_write_opt);
 	}
 
@@ -155,17 +178,40 @@ void BlackBox::save()
 		writeMesh(mesh, params.output_shading_mesh_filename, mesh_write_opt);
 	}
 
+	vector<Color> est_diffuse;
+	computeEstDiffuse(albedos, shadings, est_diffuse);
+
 	if (params.save_est_diffuse)
 	{
-		vector<Color> est_diffuse;
-		computeEstDiffuse(albedos, shadings, est_diffuse);
-
 		setMeshColors(est_diffuse, mesh);
 
 		cout << "Writing mesh: " << params.output_est_diffuse_mesh_filename
 			<< endl;
 
 		writeMesh(mesh, params.output_est_diffuse_mesh_filename, mesh_write_opt);
+	}
+
+	if (params.save_diffuse_diff)
+	{
+		vector<Color> diff;
+		computeIntensityEstDiffuseDiff(colors, est_diffuse, diff);
+		setMeshColors(diff, mesh);
+
+		cout << "Writing mesh: " << params.output_diffuse_diff_mesh_filename
+			<< endl;
+
+		//ofstream ofs;
+		//ofs.open(params.output_diffuse_diff_mesh_filename, 
+		//	ofstream::out | ofstream::trunc);
+		//for (size_t i = 0; i < n_vertices; i++)
+		//{
+		//	ofs << diff[i][0] << " "
+		//		<< diff[i][1] << " "
+		//		<< diff[i][2] << ";" << endl;
+		//}
+		//ofs.close();
+
+		writeMesh(mesh, params.output_diffuse_diff_mesh_filename, mesh_write_opt);
 	}
 
 	if (params.save_est_intensity)
@@ -384,6 +430,21 @@ void BlackBox::computeEstDiffuse(const vector<Color> &_albedos,
 			est_intensity[j] = _albedos[i][j] * _shadings[i];
 		}
 		_est_diffuse.push_back(est_intensity);
+	}
+}
+//=============================================================================
+void BlackBox::computeIntensityEstDiffuseDiff(const vector<Color> &_intensity,
+	const vector<Color> &_diffuse, vector<Color> &_diff)
+{
+	_diff.reserve(_intensity.size());
+	for (size_t i = 0; i < _intensity.size(); i++)
+	{
+		Color diff_color(3);
+		for (size_t j = 0; j < 3; j++)
+		{
+			diff_color[j] = _intensity[i][j] - _diffuse[i][j];
+		}
+		_diff.push_back(diff_color);
 	}
 }
 //=============================================================================
@@ -742,15 +803,20 @@ void BlackBox::estimateAlbedo(const ceres::Solver::Options &_options)
 
 	ceres::Problem problem;
 
-	ceres::LossFunction *data_loss_function = NULL;
+	ceres::LossFunction *huber_data_loss = NULL;
 	double huber_width = params.data_huber_width[1];
 	if (huber_width > 0.0)
 	{
-		data_loss_function = new ceres::HuberLoss(huber_width);
+		huber_data_loss = new ceres::HuberLoss(huber_width);
 	}
 
 	for (size_t i = 0; i < n_vertices; i++)
 	{
+		ceres::ScaledLoss* scaled_data_loss = new ceres::ScaledLoss(
+			huber_data_loss,
+			shadings[i],
+			ceres::TAKE_OWNERSHIP);
+
 		ResidualPhotometricError *residual = new ResidualPhotometricError(
 			&colors[i][0], 3, (unsigned int)adj_vertices[i].size(),
 			(unsigned int)adj_faces[i].size(), sh_order);
@@ -785,7 +851,7 @@ void BlackBox::estimateAlbedo(const ceres::Solver::Options &_options)
 
 		ceres::ResidualBlockId residualBlockId = problem.AddResidualBlock(
 			dyn_cost_function,
-			data_loss_function,
+			scaled_data_loss,
 			v_parameter_blocks);
 	}
 
@@ -998,15 +1064,20 @@ void BlackBox::estimateAlbedoLocalLighting(const ceres::Solver::Options &_option
 {
 	ceres::Problem problem;
 
-	ceres::LossFunction *data_loss_function = NULL;
+	ceres::LossFunction *huber_data_loss = NULL;
 	double huber_width = params.data_huber_width[2];
 	if (huber_width > 0.0)
 	{
-		data_loss_function = new ceres::HuberLoss(huber_width);
+		huber_data_loss = new ceres::HuberLoss(huber_width);
 	}
 
 	for (size_t i = 0; i < n_vertices; i++)
 	{
+		ceres::ScaledLoss* scaled_data_loss = new ceres::ScaledLoss(
+			huber_data_loss,
+			shadings[i],
+			ceres::TAKE_OWNERSHIP);
+
 		ResidualPhotometricErrorAlbedoLightingVariation *residual = 
 			new ResidualPhotometricErrorAlbedoLightingVariation(
 			&colors[i][0], 3, shadings[i]);
@@ -1016,7 +1087,7 @@ void BlackBox::estimateAlbedoLocalLighting(const ceres::Solver::Options &_option
 
 		ceres::ResidualBlockId residualBlockId = problem.AddResidualBlock(
 			cost_function,
-			data_loss_function,
+			scaled_data_loss,
 			&albedos[i][0],
 			&local_lightings[i][0]);
 	}
@@ -1382,6 +1453,99 @@ void BlackBox::estimateShape(const ceres::Solver::Options &_options)
 	updateVertices(vertex_disp);
 }
 //=============================================================================
+void BlackBox::refine()
+{
+	refineSHCoeff(params.ceres_solver.options[0]);
+
+	updateShadings();
+	updateAlbedos();
+
+	if (params.combine_albedo_lighting)
+	{
+		updateLocalLightings();
+
+		estimateAlbedoLocalLighting(params.ceres_solver.options[1]);
+	}
+	else
+	{
+		estimateAlbedo(params.ceres_solver.options[1]);
+
+		updateLocalLightings();
+		estimateLocalLighting(params.ceres_solver.options[2]);
+	}
+	
+	if (params.estimate_shape)
+	{
+		estimateShape(params.ceres_solver.options[3]);
+	}
+}
+//=============================================================================
+void BlackBox::refineSHCoeff(const ceres::Solver::Options &_options)
+{
+	ceres::Problem problem;
+
+	ceres::LossFunction *data_loss_function = NULL;
+	double huber_width = params.data_huber_width[0];
+	if (huber_width > 0.0)
+	{
+		data_loss_function = new ceres::HuberLoss(huber_width);
+	}
+
+	for (size_t i = 0; i < n_vertices; i++)
+	{
+		ResidualPhotometricError *residual = new ResidualPhotometricError(
+			&colors[i][0], 3, (unsigned int)adj_vertices[i].size(),
+			(unsigned int)adj_faces[i].size(), sh_order, false,
+			params.use_lower_bound_shading,
+			params.use_upper_bound_shading);
+
+		ceres::DynamicAutoDiffCostFunction<ResidualPhotometricError, 5>* dyn_cost_function
+			= new ceres::DynamicAutoDiffCostFunction< ResidualPhotometricError, 5 >(residual);
+
+		// List of pointers to translations per vertex
+		vector<Intensity*> v_parameter_blocks;
+
+		dyn_cost_function->AddParameterBlock(3);
+		v_parameter_blocks.push_back(&albedos[i][0]);
+		// SH Coeff
+		dyn_cost_function->AddParameterBlock(n_sh_basis);
+		v_parameter_blocks.push_back(&sh_coeff[0]);
+		// Local lighting variations
+		dyn_cost_function->AddParameterBlock(3);
+		v_parameter_blocks.push_back(&local_lightings[i][0]);
+		// Vertex
+		dyn_cost_function->AddParameterBlock(3);
+		v_parameter_blocks.push_back(&vertices[i][0]);
+		// Adjacent vertices
+		for (size_t j = 0; j < adj_vertices[i].size(); j++)
+		{
+			int v_idx = adj_vertices[i][j];
+			dyn_cost_function->AddParameterBlock(3);
+			v_parameter_blocks.push_back(&vertices[v_idx][0]);
+		}
+
+		dyn_cost_function->SetNumResiduals(3);
+
+		ceres::ResidualBlockId residualBlockId = problem.AddResidualBlock(
+			dyn_cost_function,
+			data_loss_function,
+			v_parameter_blocks);
+	}
+
+	for (size_t i = 0; i < n_vertices; ++i)
+	{
+		problem.SetParameterBlockConstant(&vertices[i][0]);
+		problem.SetParameterBlockConstant(&albedos[i][0]);
+		problem.SetParameterBlockConstant(&local_lightings[i][0]);
+	}
+
+	ceres::Solver::Summary summary;
+
+	ceres::Solve(_options, &problem, &summary);
+
+	cout << summary.FullReport() << endl;
+}
+//=============================================================================
 void BlackBox::updateVertices(vector<double> &_vertices_disp)
 {
 	for (size_t i = 0; i < _vertices_disp.size(); i++)
@@ -1420,6 +1584,17 @@ void BlackBox::updateAlbedos()
 			default:
 				break;
 			}
+		}
+	}
+}
+//=============================================================================
+void BlackBox::updateLocalLightings()
+{
+	for (size_t i = 0; i < n_vertices; i++)
+	{
+		for (size_t j = 0; j < 3; j++)
+		{
+			local_lightings[i][j] = colors[i][j] - albedos[i][j] * shadings[i];
 		}
 	}
 }

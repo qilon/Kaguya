@@ -63,6 +63,9 @@ private:
 	static void estimateAlbedoLocalLighting(const ceres::Solver::Options &_options);
 	static void estimateShape(const ceres::Solver::Options &_options);
 
+	static void refine();
+	static void refineSHCoeff(const ceres::Solver::Options &_options);
+
 	static void computeShading(const MyMesh &_mesh, 
 		const vector<Intensity> &_sh_coeff, const unsigned int &_sh_order,
 		vector<Intensity> &_shading);
@@ -70,6 +73,8 @@ private:
 		const vector<Intensity> &_sh_coeff, const unsigned int &_sh_order);
 	static void computeEstDiffuse(const vector<Color> &_albedos,
 		const vector<Intensity> &_shadings, vector<Color> &_est_diffuse);
+	static void computeIntensityEstDiffuseDiff(const vector<Color> &_intensity,
+		const vector<Color> &_diffuse, vector<Color> &_diff);
 	static void computeEstIntensity(const vector<Color> &_albedos,
 		const vector<Intensity> &_shadings, const vector<Color> &_local_lightings,
 		vector<Color> &_est_intensities);
@@ -82,6 +87,7 @@ private:
 
 	static void updateShadings();
 	static void updateAlbedos();
+	static void updateLocalLightings();
 
 public:
 	static void initialize(int *argc, char **argv);

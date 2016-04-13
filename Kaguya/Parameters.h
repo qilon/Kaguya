@@ -1,6 +1,9 @@
 #ifndef PARAMETERS_H_
 #define PARAMETERS_H_
 
+// Huber width for data terms
+#define DATA_HUBER_WIDTH	"data_huber_width"
+
 // SH Coefficients estimation
 #define SH_ORDER				"sh_order"
 #define ALBEDO_PERCENTILE		"albedo_percentile"
@@ -35,13 +38,14 @@
 #define COMBINE_ALBEDO_LIGHTING "combine_albedo_lighting"
 
 // Shape from shading
+#define ESTIMATE_SHAPE			"estimate_shape"
 #define DISPLACEMENT_WEIGHT		"displacement_weight"
 #define LAPLACIAN_SMOOTH_WEIGHT	"laplacian_smooth_weight"
 #define TV_WEIGHT				"tv_weight"
 #define USE_NORMAL_FOR_SHAPE	"use_normal_for_shape"
 
-// Huber width for data terms
-#define DATA_HUBER_WIDTH	"data_huber_width"
+// Solution refinement
+#define REFINE_SOLUTION	"refine_solution"
 
 // I/O parameters
 #define INPUT_MESH_FILENAME				"input_mesh_filename"
@@ -51,6 +55,7 @@
 #define OUTPUT_SHADING_MESH_FILENAME		"output_shading_mesh_filename"
 #define OUTPUT_LOCAL_LIGHTING_MESH_FILENAME	"output_local_lighting_mesh_filename"
 #define OUTPUT_EST_DIFFUSE_MESH_FILENAME	"output_est_diffuse_mesh_filename"
+#define OUTPUT_DIFFUSE_DIFF_MESH_FILENAME	"output_diffuse_diff_mesh_filename"
 #define OUTPUT_EST_INTENSITY_MESH_FILENAME	"output_est_intensity_mesh_filename"
 #define OUTPUT_ORIG_INTENSITY_MESH_FILENAME	"output_orig_intensity_mesh_filename"
 
@@ -59,6 +64,7 @@
 #define SAVE_SHADING		"save_shading"
 #define SAVE_LOCAL_LIGHTING	"save_local_lighting"
 #define SAVE_EST_DIFFUSE	"save_est_diffuse"
+#define SAVE_DIFFUSE_DIFF	"save_diffuse_diff"
 #define SAVE_EST_INTENSITY	"save_est_intensity"
 #define SAVE_ORIG_INTENSITY	"save_orig_intensity"
 #define SAVE_MESH_BINARY	"save_mesh_binary"
@@ -762,10 +768,14 @@ using namespace std;
 			combine_albedo_lighting = false;
 
 			// Shape from shading
+			estimate_shape = true;
 			displacement_weight = 4e-3;
 			laplacian_smooth_weight = 7.5e-3;
 			tv_weight = 7.5e-3;
 			use_normal_for_shape = false;
+
+			// Solution refinement
+			refine_solution = false;
 
 			// I/O parameters
 			input_mesh_filename = "C:/template.ply";
@@ -775,6 +785,7 @@ using namespace std;
 			output_shading_mesh_filename = "C:/shading.ply";
 			output_local_lighting_mesh_filename = "C:/local_lighting.ply";
 			output_est_diffuse_mesh_filename = "C:/diffuse.ply";
+			output_diffuse_diff_mesh_filename = "C:/diffuse_diff.ply";
 			output_est_intensity_mesh_filename = "C:/est_intensity.ply";
 			output_orig_intensity_mesh_filename = "C:/orig_intensity.ply";
 
@@ -783,6 +794,7 @@ using namespace std;
 			save_shading = true;
 			save_local_lighting = true;
 			save_est_diffuse = true;
+			save_diffuse_diff = true;
 			save_est_intensity = true;
 			save_orig_intensity = true;
 			save_mesh_binary = true;
@@ -824,10 +836,14 @@ using namespace std;
 		bool combine_albedo_lighting;
 
 		// Shape from shading
+		bool estimate_shape;
 		double displacement_weight;
 		double laplacian_smooth_weight;
 		double tv_weight;
 		bool use_normal_for_shape;
+
+		// Solution refinement
+		bool refine_solution;
 
 		// I/O parameters
 		string input_mesh_filename;
@@ -837,6 +853,7 @@ using namespace std;
 		string output_shading_mesh_filename;
 		string output_local_lighting_mesh_filename;
 		string output_est_diffuse_mesh_filename;
+		string output_diffuse_diff_mesh_filename;
 		string output_est_intensity_mesh_filename;
 		string output_orig_intensity_mesh_filename;
 		
@@ -845,6 +862,7 @@ using namespace std;
 		bool save_shading;
 		bool save_local_lighting;
 		bool save_est_diffuse;
+		bool save_diffuse_diff;
 		bool save_est_intensity;
 		bool save_orig_intensity;
 		bool save_mesh_binary;
@@ -856,6 +874,12 @@ using namespace std;
 		inline void Parameters::load(const std::string &_filename)
 		{
 			cv::FileStorage fs(_filename, cv::FileStorage::READ);
+
+			// Huber width for data terms
+			if (!fs[DATA_HUBER_WIDTH].empty())
+			{
+				fs[DATA_HUBER_WIDTH] >> data_huber_width;
+			}
 
 			// SH Coefficients estimation
 			if (!fs[SH_ORDER].empty())
@@ -968,6 +992,11 @@ using namespace std;
 
 
 			// Shape from shading
+			if (!fs[ESTIMATE_SHAPE].empty())
+			{
+				fs[ESTIMATE_SHAPE] >> estimate_shape;
+			}
+
 			if (!fs[DISPLACEMENT_WEIGHT].empty())
 			{
 				fs[DISPLACEMENT_WEIGHT] >> displacement_weight;
@@ -988,13 +1017,11 @@ using namespace std;
 				fs[USE_NORMAL_FOR_SHAPE] >> use_normal_for_shape;
 			}
 
-
-			// Huber width for data terms
-			if (!fs[DATA_HUBER_WIDTH].empty())
+			// Solution refinement
+			if (!fs[REFINE_SOLUTION].empty())
 			{
-				fs[DATA_HUBER_WIDTH] >> data_huber_width;
+				fs[REFINE_SOLUTION] >> refine_solution;
 			}
-
 
 			// I/O parameters
 			if (!fs[INPUT_MESH_FILENAME].empty())
@@ -1026,6 +1053,11 @@ using namespace std;
 			if (!fs[OUTPUT_EST_DIFFUSE_MESH_FILENAME].empty())
 			{
 				fs[OUTPUT_EST_DIFFUSE_MESH_FILENAME] >> output_est_diffuse_mesh_filename;
+			}
+
+			if (!fs[OUTPUT_DIFFUSE_DIFF_MESH_FILENAME].empty())
+			{
+				fs[OUTPUT_DIFFUSE_DIFF_MESH_FILENAME] >> output_diffuse_diff_mesh_filename;
 			}
 
 			if (!fs[OUTPUT_EST_INTENSITY_MESH_FILENAME].empty())
@@ -1062,6 +1094,11 @@ using namespace std;
 			if (!fs[SAVE_EST_DIFFUSE].empty())
 			{
 				fs[SAVE_EST_DIFFUSE] >> save_est_diffuse;
+			}
+
+			if (!fs[SAVE_DIFFUSE_DIFF].empty())
+			{
+				fs[SAVE_DIFFUSE_DIFF] >> save_diffuse_diff;
 			}
 
 			if (!fs[SAVE_EST_INTENSITY].empty())
