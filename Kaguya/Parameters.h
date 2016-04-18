@@ -1,8 +1,12 @@
 #ifndef PARAMETERS_H_
 #define PARAMETERS_H_
 
-// Huber width for data terms
+// Data terms
+#define DATA_WEIGHTS		"data_weights"
 #define DATA_HUBER_WIDTH	"data_huber_width"
+
+// Lighting confidence
+#define SPECULAR_WEIGHT_VAR	"specular_weight_var"
 
 // SH Coefficients estimation
 #define SH_ORDER				"sh_order"
@@ -15,6 +19,7 @@
 #define COLOR_DIFF_VAR			"color_diff_var"
 #define DEPTH_DIFF_VAR			"depth_diff_var"
 #define USE_DEPTH_WEIGHT		"use_depth_weight"
+#define SMOOTH_SPECULAR_WEIGHT_VAR	"smooth_specular_weight_var"
 
 // Albedo estimation
 #define SMOOTH_ALBEDO_WEIGHT		"smooth_albedo_weight"
@@ -49,6 +54,8 @@
 
 // I/O parameters
 #define INPUT_MESH_FILENAME				"input_mesh_filename"
+#define INPUT_SPECULAR_IMAGE_FILENAME	"input_specular_image_filename"
+#define INPUT_INTRINSICS_FILENAME		"input_intrinsics_filename"
 
 #define OUTPUT_SH_COEFF_FILENAME			"output_sh_coeff_filename"
 #define OUTPUT_ALBEDO_MESH_FILENAME			"output_albedo_mesh_filename"
@@ -734,8 +741,12 @@ using namespace std;
 
 		// Default constructor that sets up a generic sparse problem.
 		Parameters() {
-			// Data terms Huber width
+			// Data term
+			data_weights.resize(NUM_OPTIMIZATIONS, 0);
 			data_huber_width.resize(NUM_OPTIMIZATIONS, 0);
+
+			// Lighting confidence
+			specular_weight_var = 0.1;
 
 			// SH Coefficients estimation
 			sh_order = 2;
@@ -748,6 +759,7 @@ using namespace std;
 			color_diff_var = 0.05;
 			depth_diff_var = 50;
 			use_depth_weight = true;
+			smooth_specular_weight_var = 0.1;
 
 			// Albedo estimation
 			smooth_albedo_weight = 0.1;
@@ -779,6 +791,8 @@ using namespace std;
 
 			// I/O parameters
 			input_mesh_filename = "C:/template.ply";
+			input_specular_image_filename = "C:/specular.png";
+			input_intrinsics_filename = "C:/intrinsics.txt";
 
 			output_sh_coeff_filename = "C:/sh_coeff.txt";
 			output_albedo_mesh_filename = "C:/albedo.ply";
@@ -802,8 +816,12 @@ using namespace std;
 			ceres_solver = SolverOptions();
 		}
 
-		// Data terms Huber width
+		// Data term weight and Huber width
+		vector<double> data_weights;
 		vector<double> data_huber_width;
+
+		// Lighting confidence
+		double specular_weight_var;
 
 		// SH Coefficients estimation
 		int sh_order;
@@ -816,6 +834,7 @@ using namespace std;
 		double color_diff_var;
 		double depth_diff_var;
 		bool use_depth_weight;
+		double smooth_specular_weight_var;
 
 		// Albedo estimation
 		double smooth_albedo_weight;
@@ -847,6 +866,8 @@ using namespace std;
 
 		// I/O parameters
 		string input_mesh_filename;
+		string input_specular_image_filename;
+		string input_intrinsics_filename;
 
 		string output_sh_coeff_filename;
 		string output_albedo_mesh_filename;
@@ -875,10 +896,21 @@ using namespace std;
 		{
 			cv::FileStorage fs(_filename, cv::FileStorage::READ);
 
-			// Huber width for data terms
+			// Data terms
+			if (!fs[DATA_WEIGHTS].empty())
+			{
+				fs[DATA_WEIGHTS] >> data_weights;
+			}
+
 			if (!fs[DATA_HUBER_WIDTH].empty())
 			{
 				fs[DATA_HUBER_WIDTH] >> data_huber_width;
+			}
+
+			// Lighting confidence
+			if (!fs[SPECULAR_WEIGHT_VAR].empty())
+			{
+				fs[SPECULAR_WEIGHT_VAR] >> specular_weight_var;
 			}
 
 			// SH Coefficients estimation
@@ -924,6 +956,10 @@ using namespace std;
 				fs[USE_DEPTH_WEIGHT] >> use_depth_weight;
 			}
 
+			if (!fs[SMOOTH_SPECULAR_WEIGHT_VAR].empty())
+			{
+				fs[SMOOTH_SPECULAR_WEIGHT_VAR] >> smooth_specular_weight_var;
+			}
 
 			// Albedo estimation
 			if (!fs[SMOOTH_ALBEDO_WEIGHT].empty())
@@ -1027,6 +1063,16 @@ using namespace std;
 			if (!fs[INPUT_MESH_FILENAME].empty())
 			{
 				fs[INPUT_MESH_FILENAME] >> input_mesh_filename;
+			}
+
+			if (!fs[INPUT_SPECULAR_IMAGE_FILENAME].empty())
+			{
+				fs[INPUT_SPECULAR_IMAGE_FILENAME] >> input_specular_image_filename;
+			}
+
+			if (!fs[INPUT_INTRINSICS_FILENAME].empty())
+			{
+				fs[INPUT_INTRINSICS_FILENAME] >> input_intrinsics_filename;
 			}
 
 

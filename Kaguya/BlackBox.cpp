@@ -26,6 +26,7 @@ vector<Intensity> BlackBox::sh_coeff;
 vector<Color> BlackBox::albedos;
 vector<Color> BlackBox::local_lightings;
 vector<Intensity> BlackBox::shadings;
+vector<Intensity> BlackBox::lighting_weights;
 vector< vector<Intensity> > BlackBox::diff_weights;
 
 OpenMesh::IO::Options BlackBox::mesh_read_opt;
@@ -73,23 +74,26 @@ void BlackBox::initialize(int *argc, char **argv)
 	n_sh_basis = (unsigned int)pow(sh_order + 1, 2);
 
 	initFromMesh(mesh);
+
+	initLocalLightings(mesh, params.input_specular_image_filename,
+		params.input_intrinsics_filename);
 }
 //=============================================================================
 void BlackBox::run()
 {
 	Color white = { 1.0, 1.0, 1.0 };
-	Color black = { 0.0, 0.0, 0.0 };
 	sh_coeff.resize(n_sh_basis, 0);
 	albedos.resize(n_vertices, white);
-	local_lightings.resize(n_vertices, black);
 	shadings.resize(n_vertices, 0);
 
-	initDiffWeights();
+	initLightingWeights();
 
 	estimateSHCoeff(params.ceres_solver.options[0]);
 
 	updateShadings();
 	updateAlbedos();
+
+	initDiffWeights();
 
 	if (params.combine_albedo_lighting)
 	{
@@ -516,9 +520,12 @@ void BlackBox::setMeshColors(const vector<Intensity> &_intensities, MyMesh &_mes
 //=============================================================================
 Intensity BlackBox::rgb2gray(const Color &_color)
 {
-	Intensity gray = RGB2GRAY_R_FACTOR * _color[0] 
-		+ RGB2GRAY_G_FACTOR * _color[1] 
-		+ RGB2GRAY_B_FACTOR * _color[2];
+	//Intensity gray = RGB2GRAY_R_FACTOR * _color[0] 
+	//	+ RGB2GRAY_G_FACTOR * _color[1] 
+	//	+ RGB2GRAY_B_FACTOR * _color[2];
+
+	Color::const_iterator max_it = max_element(_color.begin(), _color.end());
+	Intensity gray = *max_it;
 
 	return gray;
 }
@@ -662,7 +669,7 @@ void BlackBox::sortAdjacentVerticesAndFaces()
 //=============================================================================
 void BlackBox::initDiffWeights()
 {
-	diff_weights.resize(n_vertices);
+	diff_weights.reserve(n_vertices);
 	for (size_t i = 0; i < n_vertices; i++)
 	{
 		vector<Intensity> weights;
@@ -670,50 +677,85 @@ void BlackBox::initDiffWeights()
 		for (size_t j = 0; j < adj_vertices[i].size(); j++)
 		{
 			unsigned int adj_v_idx = adj_vertices[i][j];
-			Intensity weight = computeDiffWeight(colors[i], colors[adj_v_idx],
-				normals[i], normals[adj_v_idx], vertices[i], vertices[adj_v_idx],
-				params.color_diff_threshold, params.color_diff_var, 
-				params.depth_diff_var);
+			Intensity weight = computeDiffWeight(i, adj_v_idx);
 			weights.push_back(weight);
 		}
-		diff_weights[i] = std::move(weights);
+		diff_weights.push_back(std::move(weights));
 	}
 }
 //=============================================================================
-Intensity BlackBox::computeDiffWeight(Color &_color1, Color &_color2,
-	Normal &_normal1, Normal &_normal2, Vertex &_vertex1, Vertex &_vertex2, 
-	Intensity _color_diff_threshold, Intensity _color_diff_var, 
-	Coordinate _depth_diff_var)
+void BlackBox::initLightingWeights()
 {
-	Intensity weight = 1.0;
-
-	if (_color_diff_threshold > 0)
+	lighting_weights.resize(n_vertices, 1);
+	if (params.specular_weight_var > 0)
 	{
-		Color color_diff = { _color1[0] - _color2[0],
-			_color1[1] - _color2[1], _color1[2] - _color2[2] };
-		Intensity color_diff_norm2 = pow(color_diff[0], 2) + pow(color_diff[1], 2)
+		for (size_t i = 0; i < n_vertices; i++)
+		{
+			Intensity weight = 
+				exp(- local_lightings[i][0] / (2 * params.specular_weight_var));
+			lighting_weights[i] = weight;
+		}
+	}
+}
+//=============================================================================
+Intensity BlackBox::computeDiffWeight(const unsigned int _v_idx,
+	const unsigned int _adj_v_idx)
+{
+	Intensity weight = 0.0;
+
+	weight = 10 * max(local_lightings[_v_idx][0], local_lightings[_adj_v_idx][0]);
+
+	//weight += 1 * (1 - min(shadings[_v_idx], shadings[_adj_v_idx]));
+
+	//weight = 10 * exp(
+	//	(max(local_lightings[_v_idx][0], local_lightings[_adj_v_idx][0]) - 1) 
+	//	/ (2 * params.color_diff_var)
+	//	);
+
+	if (params.color_diff_var > 0)
+	{
+		Color &color1 = colors[_v_idx];
+		Color &color2 = colors[_adj_v_idx];
+		Color color_diff = {
+			color1[0] - color2[0],
+			color1[1] - color2[1],
+			color1[2] - color2[2] 
+		};
+
+		Intensity color_diff_norm2 = pow(color_diff[0], 2) 
+			+ pow(color_diff[1], 2)
 			+ pow(color_diff[2], 2);
 
-		if (color_diff_norm2 <= _color_diff_threshold)
+		if (color_diff_norm2 <= params.color_diff_threshold)
 		{
-			weight = exp(color_diff_norm2 / (2 * _color_diff_var));
+			weight += exp(- color_diff_norm2 / (2 * params.color_diff_var));
+		}
+		//else
+		//{
+		//	weight = 0;
+		//}
+	}
+
+	if (params.depth_diff_var > 0)
+	{
+		if (params.use_depth_weight)
+		{
+			Vertex &vertex1 = vertices[_v_idx];
+			Vertex &vertex2 = vertices[_adj_v_idx];
+
+			Coordinate depth_diff = vertex1[2] - vertex2[2];
+			weight *= exp(- pow(depth_diff, 2) / (2 * params.depth_diff_var));
 		}
 		else
 		{
-			weight = 0;
-		}
-	}
+			Normal &normal1 = normals[_v_idx];
+			Normal &normal2 = normals[_adj_v_idx];
 
-	if (params.use_depth_weight)
-	{
-		Coordinate depth_diff = _vertex1[2] - _vertex2[2];
-		weight *= exp(pow(depth_diff, 2) / (2 * _depth_diff_var));
-	}
-	else
-	{
-		Coordinate normal_diff_cos = _normal1[0] * _normal2[0]
-			+ _normal1[1] * _normal2[1] + _normal1[2] * _normal2[2];
-		weight *= exp((1 - normal_diff_cos) / (2 * _depth_diff_var));
+			Coordinate normal_diff_cos = normal1[0] * normal2[0]
+				+ normal1[1] * normal2[1] 
+				+ normal1[2] * normal2[2];
+			weight *= exp(- (1 - normal_diff_cos) / (2 * params.depth_diff_var));
+		}
 	}
 
 	return weight;
@@ -734,15 +776,20 @@ void BlackBox::estimateSHCoeff(const ceres::Solver::Options &_options)
 
 	ceres::Problem problem;
 
-	ceres::LossFunction *data_loss_function = NULL;
+	ceres::LossFunction *huber_data_loss = NULL;
 	double huber_width = params.data_huber_width[0];
 	if (huber_width > 0.0)
 	{
-		data_loss_function = new ceres::HuberLoss(huber_width);
+		huber_data_loss = new ceres::HuberLoss(huber_width);
 	}
 
 	for (size_t i = 0; i < n_vertices; i++)
 	{
+		ceres::ScaledLoss* scaled_data_loss = new ceres::ScaledLoss(
+			huber_data_loss,
+			lighting_weights[i],
+			ceres::TAKE_OWNERSHIP);
+
 		ResidualPhotometricError *residual = new ResidualPhotometricError(
 			&grays[i], 1, (unsigned int)adj_vertices[i].size(),
 			(unsigned int)adj_faces[i].size(), sh_order, false,
@@ -779,7 +826,7 @@ void BlackBox::estimateSHCoeff(const ceres::Solver::Options &_options)
 
 		ceres::ResidualBlockId residualBlockId = problem.AddResidualBlock(
 			dyn_cost_function,
-			data_loss_function,
+			scaled_data_loss,
 			v_parameter_blocks);
 	}
 
@@ -799,22 +846,28 @@ void BlackBox::estimateSHCoeff(const ceres::Solver::Options &_options)
 //=============================================================================
 void BlackBox::estimateAlbedo(const ceres::Solver::Options &_options)
 {
-	Color black = { 0.0, 0.0, 0.0 };
+	double data_weight = params.data_weights[1];
+	double huber_width = params.data_huber_width[1];
+
+	Color black = { 0, 0, 0 };
 
 	ceres::Problem problem;
-
-	ceres::LossFunction *huber_data_loss = NULL;
-	double huber_width = params.data_huber_width[1];
-	if (huber_width > 0.0)
-	{
-		huber_data_loss = new ceres::HuberLoss(huber_width);
-	}
-
 	for (size_t i = 0; i < n_vertices; i++)
 	{
-		ceres::ScaledLoss* scaled_data_loss = new ceres::ScaledLoss(
+		ceres::LossFunction *huber_data_loss = NULL;
+		if (huber_width > 0.0)
+		{
+			huber_data_loss = new ceres::HuberLoss(huber_width);
+		}
+
+		ceres::ScaledLoss* lighting_scaled_loss = new ceres::ScaledLoss(
 			huber_data_loss,
-			shadings[i],
+			min(shadings[i], lighting_weights[i]),
+			ceres::TAKE_OWNERSHIP);
+
+		ceres::ScaledLoss* scaled_data_loss = new ceres::ScaledLoss(
+			lighting_scaled_loss,
+			data_weight,
 			ceres::TAKE_OWNERSHIP);
 
 		ResidualPhotometricError *residual = new ResidualPhotometricError(
@@ -879,13 +932,14 @@ void BlackBox::estimateAlbedo(const ceres::Solver::Options &_options)
 
 				if (weight > 0.0)
 				{
-					ResidualWeightedDifference *residual = new ResidualWeightedDifference(
-						weight, 3);
+					ResidualWeightedDifference *residual = 
+						new ResidualWeightedDifference(weight, 3);
 
 					ceres::AutoDiffCostFunction<ResidualWeightedDifference, 3, 3, 3>* cost_function =
 						new ceres::AutoDiffCostFunction<ResidualWeightedDifference, 3, 3, 3>(residual);
 
-					ceres::ResidualBlockId residualBlockId = problem.AddResidualBlock(
+					ceres::ResidualBlockId residualBlockId = 
+						problem.AddResidualBlock(
 						cost_function,
 						loss_function,
 						&albedos[i][0],
@@ -895,8 +949,8 @@ void BlackBox::estimateAlbedo(const ceres::Solver::Options &_options)
 		}
 	}
 
-	problem.SetParameterBlockConstant(&sh_coeff[0]);
 	problem.SetParameterBlockConstant(&black[0]);
+	problem.SetParameterBlockConstant(&sh_coeff[0]);
 	for (size_t i = 0; i < n_vertices; ++i)
 	{
 		problem.SetParameterBlockConstant(&vertices[i][0]);
@@ -994,7 +1048,7 @@ void BlackBox::estimateLocalLighting(const ceres::Solver::Options &_options)
 			{
 				unsigned int adj_v_idx = adj_vertices[i][j];
 
-				Intensity weight = diff_weights[i][j];
+				Intensity weight = 1;// diff_weights[i][j];
 
 				if (weight > 0.0)
 				{
@@ -1048,9 +1102,19 @@ void BlackBox::estimateLocalLighting(const ceres::Solver::Options &_options)
 		problem.SetParameterBlockConstant(&vertices[i][0]);
 		problem.SetParameterBlockConstant(&albedos[i][0]);
 
-		problem.SetParameterLowerBound(&local_lightings[i][0], 0, 0.0);
-		problem.SetParameterLowerBound(&local_lightings[i][0], 1, 0.0);
-		problem.SetParameterLowerBound(&local_lightings[i][0], 2, 0.0);
+		if (params.use_lower_bound_lighting)
+		{
+			problem.SetParameterLowerBound(&local_lightings[i][0], 0, 0.0);
+			problem.SetParameterLowerBound(&local_lightings[i][0], 1, 0.0);
+			problem.SetParameterLowerBound(&local_lightings[i][0], 2, 0.0);
+		}
+
+		if (params.use_upper_bound_lighting)
+		{
+			problem.SetParameterUpperBound(&local_lightings[i][0], 0, 1.0);
+			problem.SetParameterUpperBound(&local_lightings[i][0], 1, 1.0);
+			problem.SetParameterUpperBound(&local_lightings[i][0], 2, 1.0);
+		}
 	}
 
 	ceres::Solver::Summary summary;
@@ -1078,18 +1142,42 @@ void BlackBox::estimateAlbedoLocalLighting(const ceres::Solver::Options &_option
 			shadings[i],
 			ceres::TAKE_OWNERSHIP);
 
-		ResidualPhotometricErrorAlbedoLightingVariation *residual = 
-			new ResidualPhotometricErrorAlbedoLightingVariation(
-			&colors[i][0], 3, shadings[i]);
+		ResidualPhotometricError *residual = new ResidualPhotometricError(
+			&colors[i][0], 3, (unsigned int)adj_vertices[i].size(),
+			(unsigned int)adj_faces[i].size(), sh_order);
 
-		ceres::AutoDiffCostFunction<ResidualPhotometricErrorAlbedoLightingVariation, 3, 3, 3>* cost_function =
-			new ceres::AutoDiffCostFunction<ResidualPhotometricErrorAlbedoLightingVariation, 3, 3, 3>(residual);
+		ceres::DynamicAutoDiffCostFunction<ResidualPhotometricError, 5>* dyn_cost_function
+			= new ceres::DynamicAutoDiffCostFunction< ResidualPhotometricError, 5 >(residual);
+
+		// List of pointers to translations per vertex
+		vector<Intensity*> v_parameter_blocks;
+
+		// Albedo
+		dyn_cost_function->AddParameterBlock(3);
+		v_parameter_blocks.push_back(&albedos[i][0]);
+		// SH Coeff
+		dyn_cost_function->AddParameterBlock(n_sh_basis);
+		v_parameter_blocks.push_back(&sh_coeff[0]);
+		// Local lighting variations
+		dyn_cost_function->AddParameterBlock(3);
+		v_parameter_blocks.push_back(&local_lightings[i][0]);
+		// Vertex
+		dyn_cost_function->AddParameterBlock(3);
+		v_parameter_blocks.push_back(&vertices[i][0]);
+		// Adjacent vertices
+		for (size_t j = 0; j < adj_vertices[i].size(); j++)
+		{
+			int v_idx = adj_vertices[i][j];
+			dyn_cost_function->AddParameterBlock(3);
+			v_parameter_blocks.push_back(&vertices[v_idx][0]);
+		}
+
+		dyn_cost_function->SetNumResiduals(3);
 
 		ceres::ResidualBlockId residualBlockId = problem.AddResidualBlock(
-			cost_function,
+			dyn_cost_function,
 			scaled_data_loss,
-			&albedos[i][0],
-			&local_lightings[i][0]);
+			v_parameter_blocks);
 	}
 
 	if (params.smooth_albedo_weight > 0.0)
@@ -1172,6 +1260,8 @@ void BlackBox::estimateAlbedoLocalLighting(const ceres::Solver::Options &_option
 
 	for (size_t i = 0; i < n_vertices; ++i)
 	{
+		problem.SetParameterBlockConstant(&vertices[i][0]);
+
 		if (params.use_lower_bound_albedo)
 		{
 			problem.SetParameterLowerBound(&albedos[i][0], 0, 0.0);
@@ -1595,6 +1685,67 @@ void BlackBox::updateLocalLightings()
 		for (size_t j = 0; j < 3; j++)
 		{
 			local_lightings[i][j] = colors[i][j] - albedos[i][j] * shadings[i];
+		}
+	}
+}
+//=============================================================================
+void BlackBox::initLocalLightings(MyMesh &_mesh, const string _image_filename, 
+	const string _intrinsics_filename)
+{
+	Color black = { 0.0, 0.0, 0.0 };
+	local_lightings.resize(n_vertices, black);
+
+	cv::Mat image = cv::imread(_image_filename.c_str(), CV_LOAD_IMAGE_COLOR);
+
+	Eigen::Matrix3f K;
+	readMatrix3f(K, _intrinsics_filename);
+
+	vector<bool> visibility;
+	computeVisibility(image.cols, image.rows, K, _mesh, visibility);
+
+	MyMesh::ConstVertexIter v_it;
+	MyMesh::ConstVertexIter v_end = _mesh.vertices_end();
+	for (v_it = _mesh.vertices_begin(); v_it != v_end; ++v_it)
+	{
+		int v_idx = v_it->idx();
+
+		if (visibility[v_idx])
+		{
+			MyMesh::Point point = _mesh.point(*v_it);
+
+			Eigen::Vector3f mesh_point(point[0], point[1], point[2]);
+
+			Eigen::Vector3f img_point = K * mesh_point;
+			img_point /= img_point(2);
+
+			//Bilinear interpolation
+			float x = img_point(0);
+			float y = img_point(1);
+
+			float x1 = floor(x);
+			float y1 = floor(y);
+			float x2 = ceil(x);
+			float y2 = ceil(y);
+
+			cv::Vec3b top_left = image.at<cv::Vec3b>(y1, x1);
+			cv::Vec3b top_right = image.at<cv::Vec3b>(y1, x2);
+			cv::Vec3b bottom_left = image.at<cv::Vec3b>(y2, x1);
+			cv::Vec3b bottom_right = image.at<cv::Vec3b>(y2, x2);
+
+			float dx = x - x1;
+			float dy = y - y1;
+			float dx_1 = 1 - dx;
+			float dy_1 = 1 - dy;
+
+			Intensity* color = &local_lightings[v_idx][0];
+
+			for (int i = 0; i < 3; i++)
+			{
+				color[i] = (dx * dy * (float)bottom_right[2 - i]
+					+ dx * dy_1 * (float)top_right[2 - i]
+					+ dx_1 * dy * (float)bottom_left[2 - i]
+					+ dx_1 * dy_1 * (float)top_left[2 - i]) / 255.0;
+			}
 		}
 	}
 }

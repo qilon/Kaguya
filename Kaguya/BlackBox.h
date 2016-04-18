@@ -1,10 +1,10 @@
 #pragma once
 
 #include "residual.h"
-#include "FileIO.h"
 #include "Parameters.h"
-#include <Eigen\Dense>
 #include "ceres\ceres.h"
+#include <algorithm>
+#include "utils.h"
 //=============================================================================
 using namespace std;
 using namespace Eigen;
@@ -38,6 +38,7 @@ private:
 	static vector<Color> albedos;
 	static vector<Color> local_lightings;
 	static vector<Intensity> shadings;
+	static vector<Intensity> lighting_weights;
 	static vector< vector<Intensity> > diff_weights;
 
 	static OpenMesh::IO::Options mesh_read_opt;
@@ -47,15 +48,16 @@ private:
 	/**** PRIVATE FUNCTIONS ****/
 
 	static void initFromMesh(MyMesh& _mesh);
+	static void initLocalLightings(MyMesh &_mesh, const string _image_filename, 
+		const string _intrinsics_filename);
 
 	static Intensity rgb2gray(const Color &_color);
 	static void sortAdjacentVerticesAndFaces();
 
 	static void initDiffWeights();
-	static Intensity computeDiffWeight(Color &_color1, Color &_color2, 
-		Normal &_normal1, Normal &_normal2, Vertex &_vertex1, Vertex &_vertex2, 
-		Intensity _color_diff_threshold, Intensity _color_diff_var, 
-		Coordinate _normal_diff_var);
+	static void initLightingWeights();
+	static Intensity computeDiffWeight(const unsigned int _v_idx, 
+		const unsigned int _adj_v_idx);
 
 	static void estimateSHCoeff(const ceres::Solver::Options &_options);
 	static void estimateAlbedo(const ceres::Solver::Options &_options);
