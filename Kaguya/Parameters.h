@@ -65,6 +65,7 @@
 #define OUTPUT_DIFFUSE_DIFF_MESH_FILENAME	"output_diffuse_diff_mesh_filename"
 #define OUTPUT_EST_INTENSITY_MESH_FILENAME	"output_est_intensity_mesh_filename"
 #define OUTPUT_ORIG_INTENSITY_MESH_FILENAME	"output_orig_intensity_mesh_filename"
+#define OUTPUT_COMBINED_MESH_FILENAME		"output_combined_mesh_filename"
 
 #define SAVE_SH_COEFF		"save_sh_coeff"
 #define SAVE_ALBEDO			"save_albedo"
@@ -74,6 +75,7 @@
 #define SAVE_DIFFUSE_DIFF	"save_diffuse_diff"
 #define SAVE_EST_INTENSITY	"save_est_intensity"
 #define SAVE_ORIG_INTENSITY	"save_orig_intensity"
+#define SAVE_COMBINED		"save_combined"
 #define SAVE_MESH_BINARY	"save_mesh_binary"
 
 // Ceres options root
@@ -802,6 +804,7 @@ using namespace std;
 			output_diffuse_diff_mesh_filename = "C:/diffuse_diff.ply";
 			output_est_intensity_mesh_filename = "C:/est_intensity.ply";
 			output_orig_intensity_mesh_filename = "C:/orig_intensity.ply";
+			output_combined_mesh_filename = "C:/combined_mesh_filename.ply";
 
 			save_sh_coeff = true;
 			save_albedo = true;
@@ -811,6 +814,7 @@ using namespace std;
 			save_diffuse_diff = true;
 			save_est_intensity = true;
 			save_orig_intensity = true;
+			save_combined = true;
 			save_mesh_binary = true;
 
 			ceres_solver = SolverOptions();
@@ -877,6 +881,7 @@ using namespace std;
 		string output_diffuse_diff_mesh_filename;
 		string output_est_intensity_mesh_filename;
 		string output_orig_intensity_mesh_filename;
+		string output_combined_mesh_filename;
 		
 		bool save_sh_coeff;
 		bool save_albedo;
@@ -886,6 +891,7 @@ using namespace std;
 		bool save_diffuse_diff;
 		bool save_est_intensity;
 		bool save_orig_intensity;
+		bool save_combined;
 		bool save_mesh_binary;
 
 		// Ceres Solver options
@@ -1116,6 +1122,11 @@ using namespace std;
 				fs[OUTPUT_ORIG_INTENSITY_MESH_FILENAME] >> output_orig_intensity_mesh_filename;
 			}
 
+			if (!fs[OUTPUT_COMBINED_MESH_FILENAME].empty())
+			{
+				fs[OUTPUT_COMBINED_MESH_FILENAME] >> output_combined_mesh_filename;
+			}
+
 
 			if (!fs[SAVE_SH_COEFF].empty())
 			{
@@ -1155,6 +1166,11 @@ using namespace std;
 			if (!fs[SAVE_ORIG_INTENSITY].empty())
 			{
 				fs[SAVE_ORIG_INTENSITY] >> save_orig_intensity;
+			}
+
+			if (!fs[SAVE_COMBINED].empty())
+			{
+				fs[SAVE_COMBINED] >> save_combined;
 			}
 
 			if (!fs[SAVE_MESH_BINARY].empty())

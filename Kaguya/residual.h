@@ -984,3 +984,159 @@ public:
 private:
 	const Vertex &vertex1, &vertex2;
 };
+
+// Photometric cost for the case of known normal
+class ResidualPhotometricErrorWithNormal
+{
+public:
+	ResidualPhotometricErrorWithNormal(const Intensity* _intensity,
+		const Coordinate* _normal,
+		const unsigned int _n_channels,
+		const unsigned int _sh_order,
+		const bool _use_lower_bound_shading = false,
+		const bool _use_upper_bound_shading = false) :
+		intensity(_intensity),
+		normal(_normal),
+		n_channels(_n_channels),
+		sh_order(_sh_order),
+		use_lower_bound_shading(_use_lower_bound_shading),
+		use_upper_bound_shading(_use_upper_bound_shading)
+	{
+
+	}
+
+	template<typename T>
+	bool operator()(const T* const* const parameters, T* residuals) const
+	{
+		const T* albedo = parameters[0];
+		const T* sh_coeff = parameters[1];
+		const T* lighting_variation = parameters[2];
+
+		T aux_normal[3];
+		aux_normal[0] = T(normal[0]);
+		aux_normal[1] = T(normal[1]);
+		aux_normal[2] = T(normal[2]);
+		T shading = computeShading(aux_normal, sh_coeff, sh_order);
+
+		for (size_t i = 0; i < n_channels; ++i)
+		{
+			T est_value = albedo[i] * shading + lighting_variation[i];
+			residuals[i] = T(intensity[i]) - est_value;
+		}
+
+		bool shading_in_bounds = true;
+
+		if (use_lower_bound_shading)
+		{
+			shading_in_bounds = shading_in_bounds && shading >= T(0.0);
+		}
+
+		if (use_upper_bound_shading)
+		{
+			shading_in_bounds = shading_in_bounds && shading <= T(1.0);
+		}
+
+		return shading_in_bounds;
+	}
+
+private:
+	// Vertex intensity
+	const Intensity* intensity;
+
+	// Vertex normal vector
+	const Coordinate* normal;
+
+	// Number of color channels
+	const unsigned int n_channels;
+
+	// SH order
+	const unsigned int sh_order;
+
+	// Constrain lower and/or upper shading bound
+	const bool use_lower_bound_shading;
+	const bool use_upper_bound_shading;
+};
+
+// Photometric cost for the case of known shading
+class ResidualPhotometricErrorWithShading
+{
+public:
+	ResidualPhotometricErrorWithShading(const Intensity* _intensity,
+		const Intensity _shading,
+		const unsigned int _n_channels) :
+		intensity(_intensity),
+		shading(_shading),
+		n_channels(_n_channels)
+	{
+
+	}
+
+	template<typename T>
+	bool operator()(const T* const* const parameters, T* residuals) const
+	{
+		const T* albedo = parameters[0];
+		const T* lighting_variation = parameters[1];
+
+		for (size_t i = 0; i < n_channels; ++i)
+		{
+			T est_value = albedo[i] * T(shading) + lighting_variation[i];
+			residuals[i] = T(intensity[i]) - est_value;
+		}
+
+		return true;
+	}
+
+private:
+	// Vertex intensity
+	const Intensity* intensity;
+
+	// Vertex shading
+	const Intensity shading;
+
+	// Number of color channels
+	const unsigned int n_channels;
+};
+
+// Photometric cost for the case of known shading
+class ResidualPhotometricErrorWithAlbedoShading
+{
+public:
+	ResidualPhotometricErrorWithAlbedoShading(const Intensity* _intensity,
+		const Intensity* _albedo,
+		const Intensity _shading,
+		const unsigned int _n_channels) :
+		intensity(_intensity),
+		albedo(_albedo),
+		shading(_shading),
+		n_channels(_n_channels)
+	{
+
+	}
+
+	template<typename T>
+	bool operator()(const T* const* const parameters, T* residuals) const
+	{
+		const T* lighting_variation = parameters[0];
+
+		for (size_t i = 0; i < n_channels; ++i)
+		{
+			T est_value = T(albedo[i]) * T(shading) + lighting_variation[i];
+			residuals[i] = T(intensity[i]) - est_value;
+		}
+
+		return true;
+	}
+
+private:
+	// Vertex intensity
+	const Intensity* intensity;
+
+	// Vertex albedo
+	const Intensity* albedo;
+
+	// Vertex shading
+	const Intensity shading;
+
+	// Number of color channels
+	const unsigned int n_channels;
+};

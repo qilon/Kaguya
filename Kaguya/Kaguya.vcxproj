@@ -153,6 +153,7 @@
     <ClInclude Include="FileIO.h" />
     <ClInclude Include="MyMesh.h" />
     <ClInclude Include="Parameters.h" />
+    <ClInclude Include="ply.h" />
     <ClInclude Include="residual.h" />
     <ClInclude Include="types.h" />
     <ClInclude Include="utils.h" />

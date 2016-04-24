@@ -5,6 +5,7 @@
 #include "ceres\ceres.h"
 #include <algorithm>
 #include "utils.h"
+#include "ply.h"
 //=============================================================================
 using namespace std;
 using namespace Eigen;
@@ -40,6 +41,8 @@ private:
 	static vector<Intensity> shadings;
 	static vector<Intensity> lighting_weights;
 	static vector< vector<Intensity> > diff_weights;
+
+	static vector<bool> visibility;
 
 	static OpenMesh::IO::Options mesh_read_opt;
 	static OpenMesh::IO::Options mesh_write_opt;
@@ -90,6 +93,8 @@ private:
 	static void updateShadings();
 	static void updateAlbedos();
 	static void updateLocalLightings();
+
+	static void writeToPLY(std::string& filename, MyMesh& meshData);
 
 public:
 	static void initialize(int *argc, char **argv);
