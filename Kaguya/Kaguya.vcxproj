@@ -104,7 +104,7 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(OPENMESH_PATH)\lib;$(OPENCV_PATH)\x64\vc12\lib;$(BOOST_ROOT)\stage\lib;$(SUITESPARSE_PATH)\lib64\lapack_blas_windows;$(SUITESPARSE_PATH)\lib64;$(CERES_PATH)\lib;$(GLOG_PATH)\x64\Debug</AdditionalLibraryDirectories>
-      <AdditionalDependencies>OpenMeshCored.lib;OpenMeshToolsd.lib;opencv_core300d.lib;libblas.lib;liblapack.lib;libamdd.lib;libbtfd.lib;libcamdd.lib;libccolamdd.lib;libcholmodd.lib;libcolamdd.lib;libcxsparsed.lib;libklud.lib;libldld.lib;libspqrd.lib;libumfpackd.lib;suitesparseconfigd.lib;libglog_d.lib;ceres-debug.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>OpenMeshCored.lib;OpenMeshToolsd.lib;opencv_core300d.lib;opencv_highgui300d.lib;opencv_imgcodecs300d.lib;opencv_imgproc300d.lib;libblas.lib;liblapack.lib;libamdd.lib;libbtfd.lib;libcamdd.lib;libccolamdd.lib;libcholmodd.lib;libcolamdd.lib;libcxsparsed.lib;libklud.lib;libldld.lib;libspqrd.lib;libumfpackd.lib;suitesparseconfigd.lib;libglog_d.lib;ceres-debug.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -141,7 +141,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <AdditionalLibraryDirectories>$(OPENMESH_PATH)\lib;$(OPENCV_PATH)\x64\vc12\lib;$(BOOST_ROOT)\stage\lib;$(SUITESPARSE_PATH)\lib64\lapack_blas_windows;$(SUITESPARSE_PATH)\lib64;$(OPENCV_PATH)\x64\vc12\lib;$(CERES_PATH)\lib;$(GLOG_PATH)\x64\Release</AdditionalLibraryDirectories>
-      <AdditionalDependencies>OpenMeshCore.lib;OpenMeshTools.lib;opencv_core300.lib;libblas.lib;liblapack.lib;libamdd.lib;libbtfd.lib;libcamd.lib;libccolamd.lib;libcholmod.lib;libcolamd.lib;libcxsparse.lib;libklu.lib;libldl.lib;libspqr.lib;libumfpack.lib;suitesparseconfig.lib;libglog.lib;ceres.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>OpenMeshCore.lib;OpenMeshTools.lib;opencv_core300.lib;opencv_highgui300.lib;opencv_imgcodecs300.lib;opencv_imgproc300.lib;libblas.lib;liblapack.lib;libamdd.lib;libbtfd.lib;libcamd.lib;libccolamd.lib;libcholmod.lib;libcolamd.lib;libcxsparse.lib;libklu.lib;libldl.lib;libspqr.lib;libumfpack.lib;suitesparseconfig.lib;libglog.lib;ceres.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -153,8 +153,10 @@
     <ClInclude Include="FileIO.h" />
     <ClInclude Include="MyMesh.h" />
     <ClInclude Include="Parameters.h" />
+    <ClInclude Include="ply.h" />
     <ClInclude Include="residual.h" />
     <ClInclude Include="types.h" />
+    <ClInclude Include="utils.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
