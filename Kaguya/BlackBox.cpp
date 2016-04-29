@@ -79,38 +79,51 @@ void BlackBox::initialize(int *argc, char **argv)
 
 	initFromMesh(mesh);
 
+	initAlbedos(params.input_albedo_mesh_filename);
+
+	shadings.resize(n_vertices, 0);
+
 	initLocalLightings(mesh, params.input_specular_image_filename,
 		params.input_intrinsics_filename);
 }
 //=============================================================================
 void BlackBox::run()
 {
-	Color white = { 1.0, 1.0, 1.0 };
-	sh_coeff.resize(n_sh_basis, 0);
-	albedos.resize(n_vertices, white);
-	shadings.resize(n_vertices, 0);
-
 	initLightingWeights();
 
-	estimateSHCoeff(params.ceres_solver.options[0]);
+	if (params.estimate_sh)
+	{
+		estimateSHCoeff(params.ceres_solver.options[0]);
+	}
 
 	updateShadings();
-	updateAlbedos();
-
 	initDiffWeights();
+
+	if (params.input_albedo_mesh_filename.empty())
+	{
+		updateAlbedos();
+	}
 
 	if (params.combine_albedo_lighting)
 	{
-		updateLocalLightings();
-
-		estimateAlbedoLocalLighting(params.ceres_solver.options[1]);
+		if (params.estimate_local_lighting)
+		{
+			updateLocalLightings();
+			estimateAlbedoLocalLighting(params.ceres_solver.options[1]);
+		}
 	}
 	else
 	{
-		estimateAlbedo(params.ceres_solver.options[1]);
+		if (params.input_albedo_mesh_filename.empty())
+		{
+			estimateAlbedo(params.ceres_solver.options[1]);
+		}
 
-		updateLocalLightings();
-		estimateLocalLighting(params.ceres_solver.options[2]);
+		if (params.estimate_local_lighting)
+		{
+			updateLocalLightings();
+			estimateLocalLighting(params.ceres_solver.options[2]);
+		}
 	}
 
 	if (params.estimate_shape)
@@ -751,14 +764,17 @@ Intensity BlackBox::computeDiffWeight(const unsigned int _v_idx,
 void BlackBox::estimateSHCoeff(const ceres::Solver::Options &_options)
 {
 	Intensity black = 0.0;
-	Intensity white = 1.0;
 
-	if (params.albedo_percentile > 0.0)
+	vector<Color> intensities = colors;
+
+	if (params.input_albedo_mesh_filename.empty())
 	{
-		vector<Intensity> aux_grays = grays;
-		unsigned int nth = (unsigned int)(params.albedo_percentile * (double)aux_grays.size());
-		nth_element(aux_grays.begin(), aux_grays.begin() + nth, aux_grays.end());
-		white = aux_grays[nth-1];
+		for (size_t v_idx = 0; v_idx < n_vertices; v_idx++)
+		{
+			intensities[v_idx][0] = grays[v_idx];
+			intensities[v_idx][1] = grays[v_idx];
+			intensities[v_idx][2] = grays[v_idx];
+		}
 	}
 
 	ceres::Problem problem;
@@ -779,39 +795,50 @@ void BlackBox::estimateSHCoeff(const ceres::Solver::Options &_options)
 				lighting_weights[i],
 				ceres::TAKE_OWNERSHIP);
 
-			ResidualPhotometricErrorWithNormal *residual =
-				new ResidualPhotometricErrorWithNormal(
-				&grays[i], &normals[i][0], 1, sh_order,
-				params.use_lower_bound_shading,
-				params.use_upper_bound_shading);
+			for (size_t j = 0; j < 3; j++)
+			{
+				ResidualPhotometricErrorWithNormal *residual =
+					new ResidualPhotometricErrorWithNormal(
+					&intensities[i][j], &normals[i][0], 1, sh_order,
+					params.use_lower_bound_shading,
+					params.use_upper_bound_shading);
 
-			ceres::DynamicAutoDiffCostFunction<ResidualPhotometricErrorWithNormal, 5>* dyn_cost_function
-				= new ceres::DynamicAutoDiffCostFunction< ResidualPhotometricErrorWithNormal, 5 >(residual);
+				ceres::DynamicAutoDiffCostFunction<ResidualPhotometricErrorWithNormal, 5>* dyn_cost_function
+					= new ceres::DynamicAutoDiffCostFunction< ResidualPhotometricErrorWithNormal, 5 >(residual);
 
-			// List of pointers to translations per vertex
-			vector<Intensity*> v_parameter_blocks;
+				// List of pointers to translations per vertex
+				vector<Intensity*> v_parameter_blocks;
 
-			// White albedo
-			dyn_cost_function->AddParameterBlock(1);
-			v_parameter_blocks.push_back(&white);
-			// SH Coeff
-			dyn_cost_function->AddParameterBlock(n_sh_basis);
-			v_parameter_blocks.push_back(&sh_coeff[0]);
-			// Local lighting variations
-			dyn_cost_function->AddParameterBlock(1);
-			v_parameter_blocks.push_back(&black);
+				// Albedo
+				dyn_cost_function->AddParameterBlock(1);
+				v_parameter_blocks.push_back(&albedos[i][j]);
+				// SH Coeff
+				dyn_cost_function->AddParameterBlock(n_sh_basis);
+				v_parameter_blocks.push_back(&sh_coeff[0]);
+				// Local lighting variations
+				dyn_cost_function->AddParameterBlock(1);
+				v_parameter_blocks.push_back(&black);
 
-			dyn_cost_function->SetNumResiduals(1);
+				dyn_cost_function->SetNumResiduals(1);
 
-			ceres::ResidualBlockId residualBlockId = problem.AddResidualBlock(
-				dyn_cost_function,
-				scaled_data_loss,
-				v_parameter_blocks);
+				ceres::ResidualBlockId residualBlockId = problem.AddResidualBlock(
+					dyn_cost_function,
+					scaled_data_loss,
+					v_parameter_blocks);
+			}
 		}
 	}
 
-	problem.SetParameterBlockConstant(&white);
 	problem.SetParameterBlockConstant(&black);
+	for (size_t i = 0; i < n_vertices; i++)
+	{
+		if (visibility[i])
+		{
+			problem.SetParameterBlockConstant(&albedos[i][0]);
+			problem.SetParameterBlockConstant(&albedos[i][1]);
+			problem.SetParameterBlockConstant(&albedos[i][2]);
+		}
+	}
 
 	ceres::Solver::Summary summary;
 
@@ -830,7 +857,7 @@ void BlackBox::estimateAlbedo(const ceres::Solver::Options &_options)
 	ceres::Problem problem;
 	for (size_t i = 0; i < n_vertices; i++)
 	{
-		if (shadings[i] > 0 && visibility[i])
+		if (shadings[i] > 0 /*&& visibility[i]*/)
 		{
 
 			ceres::LossFunction *huber_data_loss = NULL;
@@ -891,11 +918,11 @@ void BlackBox::estimateAlbedo(const ceres::Solver::Options &_options)
 
 		for (size_t i = 0; i < n_vertices; i++)
 		{
-			if (shadings[i] > 0 && visibility[i])
+			if (shadings[i] > 0 /*&& visibility[i]*/)
 			{
 				for (size_t j = 0; j < adj_vertices[i].size(); j++)
 				{
-					if (shadings[j] > 0 && visibility[j])
+					if (shadings[j] > 0 /*&& visibility[j]*/)
 					{
 						unsigned int adj_v_idx = adj_vertices[i][j];
 
@@ -925,7 +952,7 @@ void BlackBox::estimateAlbedo(const ceres::Solver::Options &_options)
 	problem.SetParameterBlockConstant(&black[0]);
 	for (size_t i = 0; i < n_vertices; ++i)
 	{
-		if (shadings[i] > 0 && visibility[i])
+		if (shadings[i] > 0 /*&& visibility[i]*/)
 		{
 			if (params.use_lower_bound_albedo)
 			{
@@ -963,7 +990,7 @@ void BlackBox::estimateLocalLighting(const ceres::Solver::Options &_options)
 
 	for (size_t i = 0; i < n_vertices; i++)
 	{
-		if (visibility[i])
+		if (true /*visibility[i]*/)
 		{
 			ResidualPhotometricErrorWithAlbedoShading *residual =
 				new ResidualPhotometricErrorWithAlbedoShading(
@@ -1947,4 +1974,51 @@ void BlackBox::writeToPLY(std::string& filename, MyMesh& meshData)
 
 	/* close the PLY file */
 	ply_close(ply);
+}
+
+void BlackBox::initAlbedos(const string &mesh_filename)
+{
+	sh_coeff.resize(n_sh_basis, 0);
+
+	Color white = {1, 1, 1};
+	albedos.resize(n_vertices, white);
+
+	if (params.input_albedo_mesh_filename.empty())
+	{
+		Intensity white = 1.0;
+
+		if (params.albedo_percentile > 0.0)
+		{
+			vector<Intensity> aux_grays = grays;
+			unsigned int nth = (unsigned int)(params.albedo_percentile * (double)aux_grays.size());
+			nth_element(aux_grays.begin(), aux_grays.begin() + nth, aux_grays.end());
+			white = aux_grays[nth - 1];
+		}
+
+		for (size_t v_idx = 0; v_idx < n_vertices; v_idx++)
+		{
+			albedos[v_idx][0] = white;
+			albedos[v_idx][1] = white;
+			albedos[v_idx][2] = white;
+		}
+	}
+	else
+	{
+		MeshData mesh;
+		mesh.readPLY(params.input_albedo_mesh_filename);
+
+		for (size_t v_idx = 0; v_idx < mesh.n_vertices(); ++v_idx)
+		{
+			MeshData::ColorT color = mesh.vertex_colors[v_idx];
+			albedos[v_idx][0] = (Intensity)color[0];
+			albedos[v_idx][1] = (Intensity)color[1];
+			albedos[v_idx][2] = (Intensity)color[2];
+		}
+
+		sh_coeff.resize(mesh.n_sh_coefficients());
+		for (size_t i = 0; i < sh_coeff.size(); i++)
+		{
+			sh_coeff[i] = (Intensity)mesh.sh_coefficients[i];
+		}
+	}
 }

@@ -5,7 +5,7 @@
 #include "ceres\ceres.h"
 #include <algorithm>
 #include "utils.h"
-#include "ply.h"
+#include "MeshData.h"
 //=============================================================================
 using namespace std;
 using namespace Eigen;
@@ -57,6 +57,7 @@ private:
 	static Intensity rgb2gray(const Color &_color);
 	static void sortAdjacentVerticesAndFaces();
 
+	static void initAlbedos(const string &mesh_filename);
 	static void initDiffWeights();
 	static void initLightingWeights();
 	static Intensity computeDiffWeight(const unsigned int _v_idx, 

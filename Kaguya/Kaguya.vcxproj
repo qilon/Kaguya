@@ -151,6 +151,7 @@
   <ItemGroup>
     <ClInclude Include="BlackBox.h" />
     <ClInclude Include="FileIO.h" />
+    <ClInclude Include="MeshData.h" />
     <ClInclude Include="MyMesh.h" />
     <ClInclude Include="Parameters.h" />
     <ClInclude Include="ply.h" />

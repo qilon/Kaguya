@@ -9,6 +9,7 @@
 #define SPECULAR_WEIGHT_VAR	"specular_weight_var"
 
 // SH Coefficients estimation
+#define ESTIMATE_SH				"estimate_sh"
 #define SH_ORDER				"sh_order"
 #define ALBEDO_PERCENTILE		"albedo_percentile"
 #define USE_LOWER_BOUND_SHADING	"use_lower_bound_shading"
@@ -32,6 +33,7 @@
 #define EST_ALBEDO		2
 
 // Local lighting variation estimation
+#define ESTIMATE_LOCAL_LIGHTING				"estimate_local_lighting"
 #define SMOOTH_LOCAL_LIGHTING_WEIGHT		"smooth_local_lighting_weight"
 #define LOCAL_LIGHTING_MAGNITUDE_WEIGHT		"local_lighting_magnitude_weight"
 #define SMOOTH_LOCAL_LIGHTING_HUBER_WIDTH	"smooth_local_lighting_huber_width"
@@ -56,6 +58,7 @@
 #define INPUT_MESH_FILENAME				"input_mesh_filename"
 #define INPUT_SPECULAR_IMAGE_FILENAME	"input_specular_image_filename"
 #define INPUT_INTRINSICS_FILENAME		"input_intrinsics_filename"
+#define INPUT_ALBEDO_MESH_FILENAME		"input_albedo_mesh_filename"
 
 #define OUTPUT_SH_COEFF_FILENAME			"output_sh_coeff_filename"
 #define OUTPUT_ALBEDO_MESH_FILENAME			"output_albedo_mesh_filename"
@@ -751,6 +754,7 @@ using namespace std;
 			specular_weight_var = 0.1;
 
 			// SH Coefficients estimation
+			estimate_sh = true;
 			sh_order = 2;
 			albedo_percentile = 0.98;
 			use_lower_bound_shading = false;
@@ -771,6 +775,7 @@ using namespace std;
 			albedo_initialization = WHITE_ALBEDO;
 
 			// Local lighting variation estimation
+			estimate_local_lighting = true;
 			smooth_local_lighting_weight = 1.0;
 			local_lighting_magnitude_weight = 1.0;
 			smooth_local_lighting_huber_width = 0;
@@ -795,6 +800,7 @@ using namespace std;
 			input_mesh_filename = "C:/template.ply";
 			input_specular_image_filename = "C:/specular.png";
 			input_intrinsics_filename = "C:/intrinsics.txt";
+			input_albedo_mesh_filename = "";
 
 			output_sh_coeff_filename = "C:/sh_coeff.txt";
 			output_albedo_mesh_filename = "C:/albedo.ply";
@@ -828,6 +834,7 @@ using namespace std;
 		double specular_weight_var;
 
 		// SH Coefficients estimation
+		bool estimate_sh;
 		int sh_order;
 		double albedo_percentile;
 		bool use_lower_bound_shading;
@@ -848,6 +855,7 @@ using namespace std;
 		int albedo_initialization;
 
 		// Local lighting variation estimation
+		bool estimate_local_lighting;
 		double smooth_local_lighting_weight;
 		double local_lighting_magnitude_weight;
 		double smooth_local_lighting_huber_width;
@@ -872,6 +880,7 @@ using namespace std;
 		string input_mesh_filename;
 		string input_specular_image_filename;
 		string input_intrinsics_filename;
+		string input_albedo_mesh_filename;
 
 		string output_sh_coeff_filename;
 		string output_albedo_mesh_filename;
@@ -920,6 +929,11 @@ using namespace std;
 			}
 
 			// SH Coefficients estimation
+			if (!fs[ESTIMATE_SH].empty())
+			{
+				fs[ESTIMATE_SH] >> estimate_sh;
+			}
+
 			if (!fs[SH_ORDER].empty())
 			{
 				fs[SH_ORDER] >> sh_order;
@@ -995,6 +1009,11 @@ using namespace std;
 
 
 			// Local lighting variation estimation
+			if (!fs[ESTIMATE_LOCAL_LIGHTING].empty())
+			{
+				fs[ESTIMATE_LOCAL_LIGHTING] >> estimate_local_lighting;
+			}
+
 			if (!fs[SMOOTH_LOCAL_LIGHTING_WEIGHT].empty())
 			{
 				fs[SMOOTH_LOCAL_LIGHTING_WEIGHT] >> smooth_local_lighting_weight;
@@ -1079,6 +1098,11 @@ using namespace std;
 			if (!fs[INPUT_INTRINSICS_FILENAME].empty())
 			{
 				fs[INPUT_INTRINSICS_FILENAME] >> input_intrinsics_filename;
+			}
+
+			if (!fs[INPUT_ALBEDO_MESH_FILENAME].empty())
+			{
+				fs[INPUT_ALBEDO_MESH_FILENAME] >> input_albedo_mesh_filename;
 			}
 
 

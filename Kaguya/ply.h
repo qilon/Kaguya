@@ -83,14 +83,18 @@ static int ply_type_size[] = {
 #define OTHER_PROP       0
 #define NAMED_PROP       1
 
-#define PLY_VERTEX_RGB			0
-#define PLY_VERTEX_NORMAL_RGB	1
-#define PLY_VERTEX_RGBA			2
-#define PLY_VERTEX_NORMAL_RGBA	3
+#define PLY_VERTEX_RGB					0
+#define PLY_VERTEX_NORMAL_RGB			1
+#define PLY_VERTEX_RGBA					2
+#define PLY_VERTEX_NORMAL_RGBA			3
 #define PLY_VERTEX_RGB_SPECULAR			4
 #define PLY_VERTEX_NORMAL_RGB_SPECULAR	5
 #define PLY_VERTEX_RGBA_SPECULAR		6
 #define PLY_VERTEX_NORMAL_RGBA_SPECULAR	7
+
+#define PLY_WITH_NORMAL		0x01
+#define PLY_WITH_ALPHA		0x02
+#define PLY_WITH_SPECULAR	0x04
 
 typedef struct PlyProperty {    /* description of a property */
 
@@ -156,7 +160,7 @@ typedef struct OtherData { /* for storing other_props for an other element */
 
   ~OtherData()
   {
-	  delete[] other_props;
+	  //delete[] other_props;
   }
 
 } OtherData;
@@ -564,7 +568,7 @@ inline void ply_describe_other_properties(
 	elem = find_element(plyfile, other->name.c_str());
 	if (elem == NULL) {
 		fprintf(stderr, "ply_describe_other_properties: can't find element '%s'\n",
-			other->name);
+			other->name.c_str());
 		return;
 	}
 
@@ -1139,7 +1143,7 @@ inline void ply_get_element_setup(
 		prop = find_property(elem, prop_list[i].name.c_str(), &index);
 		if (prop == NULL) {
 			fprintf(stderr, "Warning:  Can't find property '%s' in element '%s'\n",
-				prop_list[i].name, elem_name);
+				prop_list[i].name.c_str(), elem_name);
 			continue;
 		}
 
@@ -1186,7 +1190,7 @@ inline void ply_get_property(
 	prop_ptr = find_property(elem, prop->name.c_str(), &index);
 	if (prop_ptr == NULL) {
 		fprintf(stderr, "Warning:  Can't find property '%s' in element '%s'\n",
-			prop->name, elem_name);
+			prop->name.c_str(), elem_name);
 		return;
 	}
 	prop_ptr->internal_type = prop->internal_type;
@@ -2947,7 +2951,7 @@ namespace ply{
 						exit(0);
 					}
 
-					vertex_type |= 0x01;
+					vertex_type |= PLY_WITH_NORMAL;
 				}
 				else
 				{
@@ -2966,7 +2970,7 @@ namespace ply{
 					{
 						if (equal_strings(prop->name.c_str(), "alpha"))
 						{
-							vertex_type |= 0x02;
+							vertex_type |= PLY_WITH_ALPHA;
 						}
 						else
 						{
@@ -2980,6 +2984,8 @@ namespace ply{
 										<< prop->name.c_str() << "'." << std::endl;
 									exit(0);
 								}
+
+								vertex_type |= PLY_WITH_SPECULAR;
 							}
 							else
 							{
