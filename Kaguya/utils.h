@@ -1,7 +1,7 @@
 #include "FileIO.h"
-#include <Eigen\Dense>
-#include <opencv2\imgproc\imgproc.hpp>
-#include <opencv2\highgui\highgui.hpp>
+#include <Eigen/Dense>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/highgui/highgui.hpp>
 //=============================================================================
 using namespace Eigen;
 //=============================================================================

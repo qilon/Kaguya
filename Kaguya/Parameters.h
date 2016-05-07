@@ -907,7 +907,7 @@ using namespace std;
 		SolverOptions ceres_solver;
 
 		// Load parameters from an YAML file
-		inline void Parameters::load(const std::string &_filename)
+		inline void load(const std::string &_filename)
 		{
 			cv::FileStorage fs(_filename, cv::FileStorage::READ);
 
@@ -1209,7 +1209,7 @@ using namespace std;
 			}
 		}
 
-		inline void Parameters::save(const std::string &_filename)
+		inline void save(const std::string &_filename)
 		{
 
 		}

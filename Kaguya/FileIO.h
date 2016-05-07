@@ -1,5 +1,7 @@
 #pragma once
 
+#include <fstream> 
+
 #include "MyMesh.h"
 //=============================================================================
 bool writeMesh(const MyMesh& _mesh, const string &_filename,

@@ -1,5 +1,8 @@
 #include "types.h"
 
+#include <limits>
+#include "ceres/jet.h"
+
 using namespace std;
 
 template<typename T>

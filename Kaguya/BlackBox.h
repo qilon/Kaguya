@@ -2,7 +2,7 @@
 
 #include "residual.h"
 #include "Parameters.h"
-#include "ceres\ceres.h"
+#include "ceres/ceres.h"
 #include <algorithm>
 #include "utils.h"
 #include "MeshData.h"
