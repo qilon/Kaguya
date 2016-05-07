@@ -6,6 +6,8 @@
 #include <algorithm>
 #include "utils.h"
 #include "MeshData.h"
+#include "qx_highlight_removal/qx_basic.h"
+#include "qx_highlight_removal/qx_highlight_removal_bf.h"
 //=============================================================================
 using namespace std;
 using namespace Eigen;
@@ -96,6 +98,8 @@ private:
 	static void updateLocalLightings();
 
 	static void writeToPLY(std::string& filename, MyMesh& meshData);
+
+	static void estimateDiffuse(const cv::Mat src_image, cv::Mat &diffuse_image);
 
 public:
 	static void initialize(int *argc, char **argv);

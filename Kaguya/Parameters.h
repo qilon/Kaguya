@@ -56,7 +56,7 @@
 
 // I/O parameters
 #define INPUT_MESH_FILENAME				"input_mesh_filename"
-#define INPUT_SPECULAR_IMAGE_FILENAME	"input_specular_image_filename"
+#define INPUT_IMAGE_FILENAME			"input_image_filename"
 #define INPUT_INTRINSICS_FILENAME		"input_intrinsics_filename"
 #define INPUT_ALBEDO_MESH_FILENAME		"input_albedo_mesh_filename"
 
@@ -798,7 +798,7 @@ using namespace std;
 
 			// I/O parameters
 			input_mesh_filename = "C:/template.ply";
-			input_specular_image_filename = "C:/specular.png";
+			input_image_filename = "C:/image.png";
 			input_intrinsics_filename = "C:/intrinsics.txt";
 			input_albedo_mesh_filename = "";
 
@@ -878,7 +878,7 @@ using namespace std;
 
 		// I/O parameters
 		string input_mesh_filename;
-		string input_specular_image_filename;
+		string input_image_filename;
 		string input_intrinsics_filename;
 		string input_albedo_mesh_filename;
 
@@ -1090,9 +1090,9 @@ using namespace std;
 				fs[INPUT_MESH_FILENAME] >> input_mesh_filename;
 			}
 
-			if (!fs[INPUT_SPECULAR_IMAGE_FILENAME].empty())
+			if (!fs[INPUT_IMAGE_FILENAME].empty())
 			{
-				fs[INPUT_SPECULAR_IMAGE_FILENAME] >> input_specular_image_filename;
+				fs[INPUT_IMAGE_FILENAME] >> input_image_filename;
 			}
 
 			if (!fs[INPUT_INTRINSICS_FILENAME].empty())

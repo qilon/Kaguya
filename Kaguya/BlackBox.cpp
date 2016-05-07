@@ -83,7 +83,7 @@ void BlackBox::initialize(int *argc, char **argv)
 
 	shadings.resize(n_vertices, 0);
 
-	initLocalLightings(mesh, params.input_specular_image_filename,
+	initLocalLightings(mesh, params.input_image_filename,
 		params.input_intrinsics_filename);
 }
 //=============================================================================
@@ -763,7 +763,7 @@ Intensity BlackBox::computeDiffWeight(const unsigned int _v_idx,
 //=============================================================================
 void BlackBox::estimateSHCoeff(const ceres::Solver::Options &_options)
 {
-	Intensity black = 0.0;
+	Color black = { 0.0, 0.0, 0.0 };
 
 	vector<Color> intensities = colors;
 
@@ -786,6 +786,8 @@ void BlackBox::estimateSHCoeff(const ceres::Solver::Options &_options)
 		huber_data_loss = new ceres::HuberLoss(huber_width);
 	}
 
+	const unsigned int N_CHANNELS = 3;
+
 	for (size_t i = 0; i < n_vertices; i++)
 	{
 		if (visibility[i])
@@ -795,48 +797,43 @@ void BlackBox::estimateSHCoeff(const ceres::Solver::Options &_options)
 				lighting_weights[i],
 				ceres::TAKE_OWNERSHIP);
 
-			for (size_t j = 0; j < 3; j++)
-			{
-				ResidualPhotometricErrorWithNormal *residual =
-					new ResidualPhotometricErrorWithNormal(
-					&intensities[i][j], &normals[i][0], 1, sh_order,
-					params.use_lower_bound_shading,
-					params.use_upper_bound_shading);
+			ResidualPhotometricErrorWithNormal *residual =
+				new ResidualPhotometricErrorWithNormal(
+				&intensities[i][0], &normals[i][0], N_CHANNELS, sh_order,
+				params.use_lower_bound_shading,
+				params.use_upper_bound_shading);
 
-				ceres::DynamicAutoDiffCostFunction<ResidualPhotometricErrorWithNormal, 5>* dyn_cost_function
-					= new ceres::DynamicAutoDiffCostFunction< ResidualPhotometricErrorWithNormal, 5 >(residual);
+			ceres::DynamicAutoDiffCostFunction<ResidualPhotometricErrorWithNormal, 5>* dyn_cost_function
+				= new ceres::DynamicAutoDiffCostFunction< ResidualPhotometricErrorWithNormal, 5 >(residual);
 
-				// List of pointers to translations per vertex
-				vector<Intensity*> v_parameter_blocks;
+			// List of pointers to translations per vertex
+			vector<Intensity*> v_parameter_blocks;
 
-				// Albedo
-				dyn_cost_function->AddParameterBlock(1);
-				v_parameter_blocks.push_back(&albedos[i][j]);
-				// SH Coeff
-				dyn_cost_function->AddParameterBlock(n_sh_basis);
-				v_parameter_blocks.push_back(&sh_coeff[0]);
-				// Local lighting variations
-				dyn_cost_function->AddParameterBlock(1);
-				v_parameter_blocks.push_back(&black);
+			// Albedo
+			dyn_cost_function->AddParameterBlock(N_CHANNELS);
+			v_parameter_blocks.push_back(&albedos[i][0]);
+			// SH Coeff
+			dyn_cost_function->AddParameterBlock(n_sh_basis);
+			v_parameter_blocks.push_back(&sh_coeff[0]);
+			// Local lighting variations
+			dyn_cost_function->AddParameterBlock(N_CHANNELS);
+			v_parameter_blocks.push_back(&black[0]);
 
-				dyn_cost_function->SetNumResiduals(1);
+			dyn_cost_function->SetNumResiduals(N_CHANNELS);
 
-				ceres::ResidualBlockId residualBlockId = problem.AddResidualBlock(
-					dyn_cost_function,
-					scaled_data_loss,
-					v_parameter_blocks);
-			}
+			ceres::ResidualBlockId residualBlockId = problem.AddResidualBlock(
+				dyn_cost_function,
+				scaled_data_loss,
+				v_parameter_blocks);
 		}
 	}
 
-	problem.SetParameterBlockConstant(&black);
+	problem.SetParameterBlockConstant(&black[0]);
 	for (size_t i = 0; i < n_vertices; i++)
 	{
 		if (visibility[i])
 		{
 			problem.SetParameterBlockConstant(&albedos[i][0]);
-			problem.SetParameterBlockConstant(&albedos[i][1]);
-			problem.SetParameterBlockConstant(&albedos[i][2]);
 		}
 	}
 
@@ -1528,10 +1525,11 @@ void BlackBox::estimateShape(const ceres::Solver::Options &_options)
 //=============================================================================
 void BlackBox::refine()
 {
-	refineSHCoeff(params.ceres_solver.options[0]);
+	//refineSHCoeff(params.ceres_solver.options[0]);
+	estimateSHCoeff(params.ceres_solver.options[0]);
 
 	updateShadings();
-	updateAlbedos();
+	//updateAlbedos();
 
 	if (params.combine_albedo_lighting)
 	{
@@ -1541,7 +1539,7 @@ void BlackBox::refine()
 	}
 	else
 	{
-		estimateAlbedo(params.ceres_solver.options[1]);
+		//estimateAlbedo(params.ceres_solver.options[1]);
 
 		updateLocalLightings();
 		estimateLocalLighting(params.ceres_solver.options[2]);
@@ -1679,12 +1677,48 @@ void BlackBox::initLocalLightings(MyMesh &_mesh, const string _image_filename,
 	Color black = { 0.0, 0.0, 0.0 };
 	local_lightings.resize(n_vertices, black);
 
-	cv::Mat image = cv::imread(_image_filename.c_str(), CV_LOAD_IMAGE_COLOR);
+	cv::Mat color_image_uchar = cv::imread(_image_filename.c_str(), 
+		CV_LOAD_IMAGE_COLOR);
 
-	Eigen::Matrix3f K;
-	readMatrix3f(K, _intrinsics_filename);
+	// Convert color image to double
+	cv::Mat color_image;
+	color_image_uchar.convertTo(color_image,
+		CV_64FC3, 1. / 255);
 
-	computeVisibility(image.cols, image.rows, K, _mesh, visibility);
+	// Estimate brightness
+	std::vector<cv::Mat> planes(3);
+	cv::split(color_image, planes);
+	cv::Mat brightnessImage = cv::Mat(
+		cv::max(planes[2],
+		cv::max(planes[1], planes[0]))
+		);
+
+	// Estimate diffuse image
+	cv::Mat diffuse_image_uchar;
+	estimateDiffuse(color_image_uchar, diffuse_image_uchar);
+
+	// Estimate diffuse brightness
+	std::vector<cv::Mat> diffuse_planes(3);
+	cv::split(diffuse_image_uchar, diffuse_planes);
+	cv::Mat diffuseBrightnessImage_uchar = cv::Mat(
+		cv::max(diffuse_planes[2],
+		cv::max(diffuse_planes[1], diffuse_planes[0]))
+		);
+
+	// Convert diffuse brightness to double
+	cv::Mat diffuseBrightnessImage;
+	diffuseBrightnessImage_uchar.convertTo(diffuseBrightnessImage,
+		cv::DataType<Intensity>::type, 1. / 255);
+
+	// Compute specular brightness as the difference between full brightness 
+	// and diffuse brightness
+	cv::Mat specularImage;
+	cv::subtract(brightnessImage, diffuseBrightnessImage, specularImage);
+
+	Eigen::Matrix3d K;
+	readMatrix3d(K, _intrinsics_filename);
+
+	computeVisibility(color_image.cols, color_image.rows, K, _mesh, visibility);
 
 	MyMesh::ConstVertexIter v_it;
 	MyMesh::ConstVertexIter v_end = _mesh.vertices_end();
@@ -1696,38 +1730,38 @@ void BlackBox::initLocalLightings(MyMesh &_mesh, const string _image_filename,
 		{
 			MyMesh::Point point = _mesh.point(*v_it);
 
-			Eigen::Vector3f mesh_point((float)point[0], (float)point[1], (float)point[2]);
+			Eigen::Vector3d mesh_point(point[0], point[1], point[2]);
 
-			Eigen::Vector3f img_point = K * mesh_point;
+			Eigen::Vector3d img_point = K * mesh_point;
 			img_point /= img_point(2);
 
 			//Bilinear interpolation
-			float x = img_point(0);
-			float y = img_point(1);
+			double x = img_point(0);
+			double y = img_point(1);
 
-			float x1 = floor(x);
-			float y1 = floor(y);
-			float x2 = ceil(x);
-			float y2 = ceil(y);
+			double x1 = floor(x);
+			double y1 = floor(y);
+			double x2 = ceil(x);
+			double y2 = ceil(y);
 
-			cv::Vec3b top_left = image.at<cv::Vec3b>((int)y1, (int)x1);
-			cv::Vec3b top_right = image.at<cv::Vec3b>((int)y1, (int)x2);
-			cv::Vec3b bottom_left = image.at<cv::Vec3b>((int)y2, (int)x1);
-			cv::Vec3b bottom_right = image.at<cv::Vec3b>((int)y2, (int)x2);
+			Intensity top_left = specularImage.at<Intensity>((int)y1, (int)x1);
+			Intensity top_right = specularImage.at<Intensity>((int)y1, (int)x2);
+			Intensity bottom_left = specularImage.at<Intensity>((int)y2, (int)x1);
+			Intensity bottom_right = specularImage.at<Intensity>((int)y2, (int)x2);
 
-			float dx = x - x1;
-			float dy = y - y1;
-			float dx_1 = 1 - dx;
-			float dy_1 = 1 - dy;
+			double dx = x - x1;
+			double dy = y - y1;
+			double dx_1 = 1 - dx;
+			double dy_1 = 1 - dy;
 
 			Intensity* color = &local_lightings[v_idx][0];
 
 			for (int i = 0; i < 3; i++)
 			{
-				color[i] = (dx * dy * (float)bottom_right[2 - i]
-					+ dx * dy_1 * (float)top_right[2 - i]
-					+ dx_1 * dy * (float)bottom_left[2 - i]
-					+ dx_1 * dy_1 * (float)top_left[2 - i]) / 255.0;
+				color[i] = dx * dy * bottom_right
+					+ dx * dy_1 * top_right
+					+ dx_1 * dy * bottom_left
+					+ dx_1 * dy_1 * top_left;
 			}
 		}
 	}
@@ -2021,4 +2055,58 @@ void BlackBox::initAlbedos(const string &mesh_filename)
 			sh_coeff[i] = (Intensity)mesh.sh_coefficients[i];
 		}
 	}
+}
+
+void BlackBox::estimateDiffuse(const cv::Mat src_image, cv::Mat &diffuse_image)
+{
+	qx_timer timer;
+
+	int h = src_image.rows;
+	int w = src_image.cols;
+	int c = src_image.channels();
+
+	uchar*** qx_image = qx_allocu_3(h, w, 3);
+	uchar*** qx_diffuse_image = qx_allocu_3(h, w, 3);
+
+	const uchar* p;
+	for (size_t i = 0; i < h; i++)
+	{
+		p = src_image.ptr<uchar>(i);
+		for (size_t j = 0; j < w; j++)
+		{
+			for (size_t k = 0; k < c; k++)
+			{
+				qx_image[i][j][k] = p[j * c + k];
+			}
+		}
+	}
+
+	qx_highlight_removal_bf m_highlight;
+	m_highlight.init(h, w);/*initialization*/
+	timer.start();
+
+	int nr_iter_converge = m_highlight.diffuse(qx_diffuse_image, qx_image);/*extracting diffuse reflection*/
+
+	timer.time_display("Highlight Removal");
+	printf("# of iterations before convergence: [%02d]\n", nr_iter_converge);
+
+	diffuse_image = cv::Mat(h, w, CV_8UC3);
+	uchar* p2;
+	for (size_t i = 0; i < h; i++)
+	{
+		p2 = diffuse_image.ptr<uchar>(i);
+		for (size_t j = 0; j < w; j++)
+		{
+			for (size_t k = 0; k < c; k++)
+			{
+				p2[j * c + k] = qx_diffuse_image[i][j][k];
+			}
+		}
+	}
+
+	qx_freeu_3(qx_image);
+	qx_image = NULL;
+
+	qx_freeu_3(qx_diffuse_image);
+	qx_diffuse_image = NULL;
 }

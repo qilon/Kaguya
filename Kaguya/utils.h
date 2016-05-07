@@ -6,13 +6,14 @@
 using namespace Eigen;
 //=============================================================================
 void readMatrix3f(Eigen::Matrix3f &_matrix, const string _filename);
+void readMatrix3d(Eigen::Matrix3d &_matrix, const string _filename);
 void computeVisibility(const int _img_width, const int _img_height,
-	const Matrix3f &_intrinsics, MyMesh &_mesh, vector<bool> &_visibility);
-bool pointInTriangleTest2(const Vector2f &pointP,
-	const Vector2f &pointA, const Vector2f &pointB, const Vector2f &pointC);
-bool visibilityTest(const Vector3f &vertex, const Vector3f &center,
-	const Vector3f & normal, const Vector3f & vertex1,
-	const Vector3f & vertex2, const Vector3f & vertex3);
+	const Matrix3d &_intrinsics, MyMesh &_mesh, vector<bool> &_visibility);
+bool pointInTriangleTest2(const Vector2d &pointP,
+	const Vector2d &pointA, const Vector2d &pointB, const Vector2d &pointC);
+bool visibilityTest(const Vector3d &vertex, const Vector3d &center,
+	const Vector3d & normal, const Vector3d & vertex1,
+	const Vector3d & vertex2, const Vector3d & vertex3);
 //=============================================================================
 inline void readMatrix3f(Eigen::Matrix3f &_matrix, const string _filename)
 {
@@ -26,10 +27,22 @@ inline void readMatrix3f(Eigen::Matrix3f &_matrix, const string _filename)
 	}
 }
 //=============================================================================
-inline void computeVisibility(const int _img_width, const int _img_height,
-	const Matrix3f &_intrinsics, MyMesh &_mesh, vector<bool> &_visibility)
+inline void readMatrix3d(Eigen::Matrix3d &_matrix, const string _filename)
 {
-	MatrixXf points3d(3, _mesh.n_vertices());
+	std::ifstream ifs(_filename);
+
+	for (int i = 0; i < 3; i++) {
+		for (int j = 0; j < 3; j++)
+		{
+			ifs >> _matrix(i, j);
+		}
+	}
+}
+//=============================================================================
+inline void computeVisibility(const int _img_width, const int _img_height,
+	const Matrix3d &_intrinsics, MyMesh &_mesh, vector<bool> &_visibility)
+{
+	MatrixXd points3d(3, _mesh.n_vertices());
 
 	MyMesh::ConstVertexIter v_it;
 	MyMesh::ConstVertexIter v_end(_mesh.vertices_end());
@@ -44,15 +57,15 @@ inline void computeVisibility(const int _img_width, const int _img_height,
 		points3d(2, i) = v[2];
 	}
 
-	MatrixXf points2d_hom = _intrinsics * points3d;
-	MatrixXf points2d(2, _mesh.n_vertices());
+	MatrixXd points2d_hom = _intrinsics * points3d;
+	MatrixXd points2d(2, _mesh.n_vertices());
 	points2d.row(0) = points2d_hom.row(0).cwiseProduct(points2d_hom.row(2).cwiseInverse());
 	points2d.row(1) = points2d_hom.row(1).cwiseProduct(points2d_hom.row(2).cwiseInverse());
 
 
 
 	MatrixXi faces(3, _mesh.n_faces());
-	MatrixXf face_normals(3, _mesh.n_faces());
+	MatrixXd face_normals(3, _mesh.n_faces());
 
 	MyMesh::ConstFaceIter f_it;
 	MyMesh::ConstFaceIter f_end = _mesh.faces_end();
@@ -106,7 +119,7 @@ inline void computeVisibility(const int _img_width, const int _img_height,
 	int xminI, xmaxI, yminI, ymaxI;
 	int xx, yy;
 	int vertex1, vertex2, vertex3;;
-	MatrixXf faceCenters(3, _mesh.n_faces());
+	MatrixXd faceCenters(3, _mesh.n_faces());
 
 	for (int faceInd = 0; faceInd < _mesh.n_faces(); faceInd++)
 	{
@@ -129,10 +142,10 @@ inline void computeVisibility(const int _img_width, const int _img_height,
 			xmax < 0 || ymax < 0)
 			continue;
 
-		xminI = max(1.0, floor(xmin));
-		yminI = max(1.0, floor(ymin));
-		xmaxI = min(ceil(xmax), double(m_nWidth));
-		ymaxI = min(ceil(ymax), double(m_nHeight));
+		xminI = (int)max(1.0, floor(xmin));
+		yminI = (int)max(1.0, floor(ymin));
+		xmaxI = (int)min(ceil(xmax), double(m_nWidth));
+		ymaxI = (int)min(ceil(ymax), double(m_nHeight));
 		for (xx = xminI - 1; xx < xmaxI; ++xx)
 		{
 			for (yy = yminI - 1; yy < ymaxI; ++yy)
@@ -141,9 +154,9 @@ inline void computeVisibility(const int _img_width, const int _img_height,
 			}
 		}
 
-		Vector3f v1 = points3d.col(vertex1);
-		Vector3f v2 = points3d.col(vertex2);
-		Vector3f v3 = points3d.col(vertex3);
+		Vector3d v1 = points3d.col(vertex1);
+		Vector3d v2 = points3d.col(vertex2);
+		Vector3d v3 = points3d.col(vertex3);
 
 		// prepare the face center and face normals for the purpose of gettin
 		// intersection between faces and back-projected ray.
@@ -230,11 +243,11 @@ inline void computeVisibility(const int _img_width, const int _img_height,
 						points2d.col(vertex2),
 						points2d.col(vertex3)))
 					{
-						Vector3f v0 = points3d.col(vertexInd);
-						Vector3f v1 = points3d.col(vertex1);
-						Vector3f v2 = points3d.col(vertex2);
-						Vector3f v3 = points3d.col(vertex3);
-						Vector3f fn = face_normals.col(faceInd);
+						Vector3d v0 = points3d.col(vertexInd);
+						Vector3d v1 = points3d.col(vertex1);
+						Vector3d v2 = points3d.col(vertex2);
+						Vector3d v3 = points3d.col(vertex3);
+						Vector3d fn = face_normals.col(faceInd);
 
 						// compute the intersection between the
 						// backtraced ray of vertexInd and the face faceInd
@@ -289,10 +302,10 @@ inline void computeVisibility(const int _img_width, const int _img_height,
 	cout << "occluded num: " << n_occluded << endl << endl;
 }
 //=============================================================================
-inline bool pointInTriangleTest2(const Vector2f &pointP,
-	const Vector2f &pointA, const Vector2f &pointB, const Vector2f &pointC)
+inline bool pointInTriangleTest2(const Vector2d &pointP,
+	const Vector2d &pointA, const Vector2d &pointB, const Vector2d &pointC)
 {
-	float A, B, D, E, C, F;
+	double A, B, D, E, C, F;
 	A = pointA(0) - pointC(0);
 	B = pointB(0) - pointC(0);
 	D = pointA(1) - pointC(1);
@@ -301,7 +314,7 @@ inline bool pointInTriangleTest2(const Vector2f &pointP,
 	C = pointC(0) - pointP(0);
 	F = pointC(1) - pointP(1);
 
-	float alpha, beta, gamma;
+	double alpha, beta, gamma;
 	alpha = (B*(F)-C*(E)) / (A*(E)-B*(D));
 	beta = (A*(F)-C*(D)) / (B*(D)-A*(E));
 	gamma = 1 - alpha - beta;
@@ -310,17 +323,17 @@ inline bool pointInTriangleTest2(const Vector2f &pointP,
 
 }
 //=============================================================================
-inline bool visibilityTest(const Vector3f &vertex, const Vector3f &center,
-	const Vector3f & normal, const Vector3f & vertex1,
-	const Vector3f & vertex2, const Vector3f & vertex3)
+inline bool visibilityTest(const Vector3d &vertex, const Vector3d &center,
+	const Vector3d & normal, const Vector3d & vertex1,
+	const Vector3d & vertex2, const Vector3d & vertex3)
 {
 	// tell if a point is in front of a triangle face
-	float faceDist, pointDist, scale;
+	double faceDist, pointDist, scale;
 	faceDist = center.dot(normal);
 	pointDist = vertex.dot(normal);
 	scale = faceDist / pointDist;
 
-	Vector3f intersection = scale*vertex;
+	Vector3d intersection = scale*vertex;
 
 	// if the intersection is in front,
 	// then the test vertex is occluded by
