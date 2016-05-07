@@ -834,8 +834,9 @@ public:
 			int curr_i = i % n_adj_vertices;
 			int next_i = (i + 1) % n_adj_vertices;
 
-			weight += computeCotangent(p, adjP[curr_i], adjP[prev_i]);
-			weight += computeCotangent(p, adjP[curr_i], adjP[next_i]);
+			//weight += computeCotangent(p, adjP[curr_i], adjP[prev_i]);
+			//weight += computeCotangent(p, adjP[curr_i], adjP[next_i]);
+			weight = T(1.0);
 
 			laplacian_x += weight * (adjP[curr_i][0] - p[0]);
 			laplacian_y += weight * (adjP[curr_i][1] - p[1]);
