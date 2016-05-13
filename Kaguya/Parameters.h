@@ -14,6 +14,7 @@
 #define ALBEDO_PERCENTILE		"albedo_percentile"
 #define USE_LOWER_BOUND_SHADING	"use_lower_bound_shading"
 #define USE_UPPER_BOUND_SHADING	"use_upper_bound_shading"
+#define USE_SPECULAR_WEIGHT		"use_specular_weight"
 
 // Smoothing Weight
 #define COLOR_DIFF_THRESHOLD	"color_diff_threshold"
@@ -21,6 +22,8 @@
 #define DEPTH_DIFF_VAR			"depth_diff_var"
 #define USE_DEPTH_WEIGHT		"use_depth_weight"
 #define SMOOTH_SPECULAR_WEIGHT_VAR	"smooth_specular_weight_var"
+
+#define SHADING_WEIGHT_VAR			"shading_weight_var"
 
 // Albedo estimation
 #define SMOOTH_ALBEDO_WEIGHT		"smooth_albedo_weight"
@@ -32,6 +35,11 @@
 #define COLOR_ALBEDO	1
 #define EST_ALBEDO		2
 
+#define INIT_KMEANS					"init_kmeans"
+#define KMEANS_CLUSTERS				"kmeans_clusters"
+
+#define REESTIMATE_SH_COEFF_WITH_ALBEDO		"reestimate_sh_coeff_with_albedo"
+
 // Local lighting variation estimation
 #define ESTIMATE_LOCAL_LIGHTING				"estimate_local_lighting"
 #define SMOOTH_LOCAL_LIGHTING_WEIGHT		"smooth_local_lighting_weight"
@@ -40,6 +48,7 @@
 #define LOCAL_LIGHTING_MAGNITUDE_HUBER_WIDTH "local_lighting_magnitude_huber_width"
 #define USE_LOWER_BOUND_LIGHTING			"use_lower_bound_lighting"
 #define USE_UPPER_BOUND_LIGHTING			"use_upper_bound_lighting"
+#define SPECULAR_FROM_IMAGE					"specular_from_image"
 
 // Join estimation of albedo and local lighting variation
 #define COMBINE_ALBEDO_LIGHTING "combine_albedo_lighting"
@@ -58,7 +67,7 @@
 #define INPUT_MESH_FILENAME				"input_mesh_filename"
 #define INPUT_IMAGE_FILENAME			"input_image_filename"
 #define INPUT_INTRINSICS_FILENAME		"input_intrinsics_filename"
-#define INPUT_ALBEDO_MESH_FILENAME		"input_albedo_mesh_filename"
+#define INPUT_EXTRA_MESH_FILENAME		"input_extra_mesh_filename"
 
 #define OUTPUT_SH_COEFF_FILENAME			"output_sh_coeff_filename"
 #define OUTPUT_ALBEDO_MESH_FILENAME			"output_albedo_mesh_filename"
@@ -759,6 +768,7 @@ using namespace std;
 			albedo_percentile = 0.98;
 			use_lower_bound_shading = false;
 			use_upper_bound_shading = false;
+			use_specular_weight = false;
 
 			// Smoothing Weight
 			color_diff_threshold = 0.5;
@@ -767,12 +777,19 @@ using namespace std;
 			use_depth_weight = true;
 			smooth_specular_weight_var = 0.1;
 
+			shading_weight_var = 0.1;
+
 			// Albedo estimation
+			estimate_sh = true;
 			smooth_albedo_weight = 0.1;
 			smooth_albedo_huber_width = 0;
 			use_lower_bound_albedo = false;
 			use_upper_bound_albedo = false;
 			albedo_initialization = WHITE_ALBEDO;
+			init_kmeans = false;
+			kmeans_clusters = 2;
+
+			reestimate_sh_coeff_with_albedo = false;
 
 			// Local lighting variation estimation
 			estimate_local_lighting = true;
@@ -782,6 +799,7 @@ using namespace std;
 			local_lighting_magnitude_huber_width = 0;
 			use_lower_bound_lighting = false;
 			use_upper_bound_lighting = false;
+			specular_from_image = false;
 
 			// Join estimation of albedo and local lighting variation
 			combine_albedo_lighting = false;
@@ -800,7 +818,7 @@ using namespace std;
 			input_mesh_filename = "C:/template.ply";
 			input_image_filename = "C:/image.png";
 			input_intrinsics_filename = "C:/intrinsics.txt";
-			input_albedo_mesh_filename = "";
+			input_extra_mesh_filename = "";
 
 			output_sh_coeff_filename = "C:/sh_coeff.txt";
 			output_albedo_mesh_filename = "C:/albedo.ply";
@@ -839,6 +857,7 @@ using namespace std;
 		double albedo_percentile;
 		bool use_lower_bound_shading;
 		bool use_upper_bound_shading;
+		bool use_specular_weight;
 
 		// Smoothing Weight
 		double color_diff_threshold;
@@ -847,12 +866,18 @@ using namespace std;
 		bool use_depth_weight;
 		double smooth_specular_weight_var;
 
+		double shading_weight_var;
+
 		// Albedo estimation
 		double smooth_albedo_weight;
 		double smooth_albedo_huber_width;
 		bool use_lower_bound_albedo;
 		bool use_upper_bound_albedo;
 		int albedo_initialization;
+		bool init_kmeans;
+		int kmeans_clusters;
+
+		bool reestimate_sh_coeff_with_albedo;
 
 		// Local lighting variation estimation
 		bool estimate_local_lighting;
@@ -862,6 +887,7 @@ using namespace std;
 		double local_lighting_magnitude_huber_width;
 		bool use_lower_bound_lighting;
 		bool use_upper_bound_lighting;
+		bool specular_from_image;
 
 		// Join estimation of albedo and local lighting variation
 		bool combine_albedo_lighting;
@@ -880,7 +906,7 @@ using namespace std;
 		string input_mesh_filename;
 		string input_image_filename;
 		string input_intrinsics_filename;
-		string input_albedo_mesh_filename;
+		string input_extra_mesh_filename;
 
 		string output_sh_coeff_filename;
 		string output_albedo_mesh_filename;
@@ -928,6 +954,12 @@ using namespace std;
 				fs[SPECULAR_WEIGHT_VAR] >> specular_weight_var;
 			}
 
+			// Shading confidence
+			if (!fs[SHADING_WEIGHT_VAR].empty())
+			{
+				fs[SHADING_WEIGHT_VAR] >> shading_weight_var;
+			}
+
 			// SH Coefficients estimation
 			if (!fs[ESTIMATE_SH].empty())
 			{
@@ -952,6 +984,11 @@ using namespace std;
 			if (!fs[USE_UPPER_BOUND_SHADING].empty())
 			{
 				fs[USE_UPPER_BOUND_SHADING] >> use_upper_bound_shading;
+			}
+
+			if (!fs[USE_SPECULAR_WEIGHT].empty())
+			{
+				fs[USE_SPECULAR_WEIGHT] >> use_specular_weight;
 			}
 
 
@@ -1007,6 +1044,20 @@ using namespace std;
 				fs[ALBEDO_INITIALIZATION] >> albedo_initialization;
 			}
 
+			if (!fs[INIT_KMEANS].empty())
+			{
+				fs[INIT_KMEANS] >> init_kmeans;
+			}
+
+			if (!fs[KMEANS_CLUSTERS].empty())
+			{
+				fs[KMEANS_CLUSTERS] >> kmeans_clusters;
+			}
+
+			if (!fs[REESTIMATE_SH_COEFF_WITH_ALBEDO].empty())
+			{
+				fs[REESTIMATE_SH_COEFF_WITH_ALBEDO] >> reestimate_sh_coeff_with_albedo;
+			}
 
 			// Local lighting variation estimation
 			if (!fs[ESTIMATE_LOCAL_LIGHTING].empty())
@@ -1042,6 +1093,11 @@ using namespace std;
 			if (!fs[USE_UPPER_BOUND_LIGHTING].empty())
 			{
 				fs[USE_UPPER_BOUND_LIGHTING] >> use_upper_bound_lighting;
+			}
+
+			if (!fs[SPECULAR_FROM_IMAGE].empty())
+			{
+				fs[SPECULAR_FROM_IMAGE] >> specular_from_image;
 			}
 
 
@@ -1100,9 +1156,9 @@ using namespace std;
 				fs[INPUT_INTRINSICS_FILENAME] >> input_intrinsics_filename;
 			}
 
-			if (!fs[INPUT_ALBEDO_MESH_FILENAME].empty())
+			if (!fs[INPUT_EXTRA_MESH_FILENAME].empty())
 			{
-				fs[INPUT_ALBEDO_MESH_FILENAME] >> input_albedo_mesh_filename;
+				fs[INPUT_EXTRA_MESH_FILENAME] >> input_extra_mesh_filename;
 			}
 
 

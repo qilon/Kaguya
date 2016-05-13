@@ -12,6 +12,7 @@
 using namespace std;
 using namespace Eigen;
 using namespace OpenMesh;
+using namespace cv;
 //=============================================================================
 class BlackBox
 {
@@ -21,6 +22,8 @@ private:
 	static Parameters params;
 
 	static MyMesh mesh;
+
+	static MeshData extra_mesh;
 
 	static unsigned int n_vertices;
 	static unsigned int n_faces;
@@ -45,6 +48,8 @@ private:
 	static vector< vector<Intensity> > diff_weights;
 
 	static vector<bool> visibility;
+	static cv::Mat color_image;
+	static Eigen::Matrix3d K;
 
 	static OpenMesh::IO::Options mesh_read_opt;
 	static OpenMesh::IO::Options mesh_write_opt;
@@ -59,13 +64,16 @@ private:
 	static Intensity rgb2gray(const Color &_color);
 	static void sortAdjacentVerticesAndFaces();
 
-	static void initAlbedos(const string &mesh_filename);
+	static void initAlbedos();
 	static void initDiffWeights();
 	static void initLightingWeights();
 	static Intensity computeDiffWeight(const unsigned int _v_idx, 
 		const unsigned int _adj_v_idx);
+	static void initVisibility(MyMesh &_mesh, 
+		const string _image_filename, const string _intrinsics_filename);
 
-	static void estimateSHCoeff(const ceres::Solver::Options &_options);
+	static void estimateSHCoeff(const ceres::Solver::Options &_options,
+		bool _use_gray_color);
 	static void estimateAlbedo(const ceres::Solver::Options &_options);
 	static void estimateLocalLighting(const ceres::Solver::Options &_options);
 	static void estimateAlbedoLocalLighting(const ceres::Solver::Options &_options);
@@ -96,10 +104,13 @@ private:
 	static void updateShadings();
 	static void updateAlbedos();
 	static void updateLocalLightings();
+	static void updateColorsFromImage();
 
 	static void writeToPLY(std::string& filename, MyMesh& meshData);
 
 	static void estimateDiffuse(const cv::Mat src_image, cv::Mat &diffuse_image);
+
+	static void initAlbedoKmeans(const int _kmeans_clusters);
 
 public:
 	static void initialize(int *argc, char **argv);
