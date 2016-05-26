@@ -543,6 +543,21 @@ void BlackBox::setMeshColors(const vector<Intensity> &_intensities, MyMesh &_mes
 			(unsigned char)(_intensities[i] * 255.0), 
 			(unsigned char)(_intensities[i] * 255.0)
 			);
+
+		if (_intensities[i] > 1)
+		{
+			c[0] = 255;
+			c[1] = 0;
+			c[2] = 0;
+		}
+
+		if (_intensities[i] < 0)
+		{
+			c[0] = 0;
+			c[1] = 0;
+			c[2] = 255;
+		}
+
 		mesh.set_color(*v_it, c);
 	}
 }
@@ -829,8 +844,8 @@ void BlackBox::estimateSHCoeff(const ceres::Solver::Options &_options,
 
 	for (size_t i = 0; i < n_vertices; i++)
 	{
-		if (visibility[i])
-		{
+		//if (visibility[i])
+		//{
 			ceres::LossFunction *huber_data_loss = NULL;
 			double huber_width = params.data_huber_width[0];
 			if (huber_width > 0.0)
@@ -873,16 +888,16 @@ void BlackBox::estimateSHCoeff(const ceres::Solver::Options &_options,
 				dyn_cost_function,
 				scaled_data_loss,
 				v_parameter_blocks);
-		}
+		//}
 	}
 
 	problem.SetParameterBlockConstant(&black[0]);
 	for (size_t i = 0; i < n_vertices; i++)
 	{
-		if (visibility[i])
-		{
+		//if (visibility[i])
+		//{
 			problem.SetParameterBlockConstant(&albedos[i][0]);
-		}
+		//}
 	}
 
 	ceres::Solver::Summary summary;
@@ -902,7 +917,7 @@ void BlackBox::estimateAlbedo(const ceres::Solver::Options &_options)
 	ceres::Problem problem;
 	for (size_t i = 0; i < n_vertices; i++)
 	{
-		if (shadings[i] > 0 /*&& visibility[i]*/)
+		if (shadings[i] >= 0 /*&& visibility[i]*/)
 		{
 			ceres::LossFunction *huber_data_loss = NULL;
 			if (huber_width > 0.0)
@@ -2214,16 +2229,24 @@ void BlackBox::initAlbedoKmeans(const int _kmeans_clusters)
 	int n_channels = 3;
 	int n_clusters = _kmeans_clusters;
 
-	Mat prev_albedo(n_points, 1, CV_32FC3);
+	Mat cv_colors(n_points, 1, CV_32FC3);
 
+	// K-means by chromaticity
 	MatIterator_<cv::Vec3f> it;
-	MatIterator_<cv::Vec3f> end = prev_albedo.end<cv::Vec3f>();
+	MatIterator_<cv::Vec3f> end = cv_colors.end<cv::Vec3f>();
 	int i = 0;
-	for (it = prev_albedo.begin<cv::Vec3f>(); it != end; ++it)
+	for (it = cv_colors.begin<cv::Vec3f>(); it != end; ++it)
 	{
-		(*it)[0] = (float)colors[i][0];
-		(*it)[1] = (float)colors[i][1];
-		(*it)[2] = (float)colors[i][2];
+		float rgb = colors[i][0] + colors[i][1] + colors[i][2];
+
+		if (rgb < std::numeric_limits<float>::epsilon())
+		{
+			rgb = std::numeric_limits<float>::epsilon();
+		}
+
+		(*it)[0] = (float)(colors[i][0] / rgb);
+		(*it)[1] = (float)(colors[i][1] / rgb);
+		(*it)[2] = (float)(colors[i][2] / rgb);
 
 		i++;
 	}
@@ -2232,14 +2255,48 @@ void BlackBox::initAlbedoKmeans(const int _kmeans_clusters)
 	Mat centers;
 	TermCriteria crit = TermCriteria(CV_TERMCRIT_ITER + CV_TERMCRIT_EPS, 100, 0.5);
 
-	kmeans(prev_albedo, n_clusters, labels, crit, 3, KMEANS_PP_CENTERS, centers);
+	kmeans(cv_colors, n_clusters, labels, crit, 3, KMEANS_PP_CENTERS, centers);
 
-	for (size_t i = 0; i < n_vertices; i++)
+	// Compute intensity per cluster
+	vector<Color> cluster_colors;
+	cluster_colors.resize(_kmeans_clusters, Color({ 0, 0, 0 }));
+
+	vector<vector<float>> red(_kmeans_clusters);
+	vector<vector<float>> green(_kmeans_clusters);
+	vector<vector<float>> blue(_kmeans_clusters);
+
+	for (size_t i = 0; i < n_points; i++)
+	{
+		int cluster_idx = labels.at<int>(i);
+
+		red[cluster_idx].push_back(colors[i][0]);
+		green[cluster_idx].push_back(colors[i][1]);
+		blue[cluster_idx].push_back(colors[i][2]);
+	}
+
+	for (size_t i = 0; i < _kmeans_clusters; i++)
+	{
+		float percentage = params.albedo_percentile;
+
+		unsigned int percentile = (unsigned int)(red[i].size() * percentage);
+
+		// Max colors
+		std::nth_element(red[i].begin(), red[i].begin() + percentile, red[i].end());
+		cluster_colors[i][0] = *(red[i].begin() + percentile);
+
+		std::nth_element(green[i].begin(), green[i].begin() + percentile, green[i].end());
+		cluster_colors[i][1] = *(green[i].begin() + percentile);
+
+		std::nth_element(blue[i].begin(), blue[i].begin() + percentile, blue[i].end());
+		cluster_colors[i][2] = *(blue[i].begin() + percentile);
+	}
+
+	for (size_t i = 0; i < n_points; i++)
 	{	
 		int cluster_idx = labels.at<int>(i);
 
-		albedos[i][0] = (double)centers.at<float>(cluster_idx, 0);
-		albedos[i][1] = (double)centers.at<float>(cluster_idx, 1);
-		albedos[i][2] = (double)centers.at<float>(cluster_idx, 2);
+		albedos[i][0] = (double)cluster_colors[cluster_idx][0];
+		albedos[i][1] = (double)cluster_colors[cluster_idx][1];
+		albedos[i][2] = (double)cluster_colors[cluster_idx][2];
 	}
 }
